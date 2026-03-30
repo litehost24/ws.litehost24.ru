@@ -12,12 +12,14 @@ class VpnAgentClient
 {
     private Server $server;
     private int $timeoutSec;
+    private VpnAgentMtlsPathResolver $mtlsPathResolver;
 
     // The API can take >15s under load, especially for peer provisioning.
     public function __construct(Server $server, int $timeoutSec = 35)
     {
         $this->server = $server;
         $this->timeoutSec = $timeoutSec;
+        $this->mtlsPathResolver = new VpnAgentMtlsPathResolver();
     }
 
     /**
@@ -220,13 +222,17 @@ class VpnAgentClient
     {
         $this->assertConfigured();
 
+        $caPath = $this->mtlsPathResolver->resolve((string) $this->server->node1_api_ca_path);
+        $certPath = $this->mtlsPathResolver->resolve((string) $this->server->node1_api_cert_path);
+        $keyPath = $this->mtlsPathResolver->resolve((string) $this->server->node1_api_key_path);
+
         return Http::baseUrl(rtrim((string) $this->server->node1_api_url, '/'))
             ->timeout($this->timeoutSec)
             ->connectTimeout(8)
             ->withOptions([
-                'verify' => (string) $this->server->node1_api_ca_path,
-                'cert' => (string) $this->server->node1_api_cert_path,
-                'ssl_key' => (string) $this->server->node1_api_key_path,
+                'verify' => $caPath,
+                'cert' => $certPath,
+                'ssl_key' => $keyPath,
             ])
             ->acceptJson();
     }
