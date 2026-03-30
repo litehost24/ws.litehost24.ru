@@ -3,6 +3,12 @@
 @endphp
 
 <div class="instruction-tabs" data-instruction-tabs>
+    @if (!empty($pendingVpnAccessModeDisconnectAt))
+        <div class="instruction-tabs__notice" role="status">
+            Настройте новое подключение сейчас. Старая настройка будет отключена автоматически в
+            {{ $pendingVpnAccessModeDisconnectAt->copy()->timezone('Europe/Moscow')->format('H:i') }} МСК.
+        </div>
+    @endif
     <div class="instruction-tabs__bar" role="tablist" aria-label="Варианты подключения">
         <button
             type="button"

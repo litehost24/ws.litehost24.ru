@@ -51,11 +51,16 @@ class UserSubscription extends Model
         'connection_config',
         'server_id',
         'vpn_access_mode',
+        'pending_vpn_access_mode_source_server_id',
+        'pending_vpn_access_mode_source_peer_name',
+        'pending_vpn_access_mode_disconnect_at',
+        'pending_vpn_access_mode_error',
         'vless_blocked_until',
         'note',
     ];
 
     protected $casts = [
+        'pending_vpn_access_mode_disconnect_at' => 'datetime',
         'vless_blocked_until' => 'datetime',
         'dual_protocol_last_seen_at' => 'datetime',
     ];
@@ -395,6 +400,20 @@ class UserSubscription extends Model
         return Server::vpnAccessModeOptions()[$mode] ?? null;
     }
 
+    public function hasPendingVpnAccessModeSwitch(): bool
+    {
+        return (int) ($this->pending_vpn_access_mode_source_server_id ?? 0) > 0
+            && trim((string) ($this->pending_vpn_access_mode_source_peer_name ?? '')) !== ''
+            && $this->pending_vpn_access_mode_disconnect_at !== null;
+    }
+
+    public function pendingVpnAccessModeDisconnectAt(): ?Carbon
+    {
+        $value = $this->pending_vpn_access_mode_disconnect_at;
+
+        return $value instanceof Carbon ? $value : null;
+    }
+
     public function switchTargetVpnAccessMode(): ?string
     {
         $mode = $this->resolveVpnAccessMode();
@@ -414,6 +433,10 @@ class UserSubscription extends Model
         }
 
         if ((string) ($this->action ?? '') === 'create' && !(bool) ($this->is_processed ?? false)) {
+            return false;
+        }
+
+        if ($this->hasPendingVpnAccessModeSwitch()) {
             return false;
         }
 

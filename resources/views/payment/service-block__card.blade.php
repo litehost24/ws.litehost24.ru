@@ -19,7 +19,14 @@
     $switchTargetMode = $userSub?->switchTargetVpnAccessMode();
     $switchTargetLabel = $switchTargetMode ? (\App\Models\Server::vpnAccessModeOptions()[$switchTargetMode] ?? null) : null;
     $canSwitchVpnAccessMode = $userSub?->canSwitchVpnAccessMode() ?? false;
-    $switchWarningText = 'После переключения старый AmneziaWG-конфиг перестанет работать. VLESS не изменится. Нужно будет скачать и загрузить новый AmneziaWG-конфиг.';
+    $pendingVpnAccessModeDisconnectAt = $userSub?->pendingVpnAccessModeDisconnectAt();
+    $hasPendingVpnAccessModeSwitch = $userSub?->hasPendingVpnAccessModeSwitch() ?? false;
+    $pendingVpnAccessModeText = $pendingVpnAccessModeDisconnectAt
+        ? 'Новое подключение готово. Старая настройка отключится автоматически в '
+            . $pendingVpnAccessModeDisconnectAt->copy()->timezone('Europe/Moscow')->format('H:i')
+            . ' МСК.'
+        : null;
+    $switchWarningText = 'Сейчас подготовим новое подключение и откроем новую инструкцию. Старая настройка продолжит работать ещё 5 минут, затем отключится автоматически.';
     $instructionUrl = $userSub
         ? route('user-subscription.instruction', [
             'user_subscription_id' => (int) $userSub->id,
@@ -46,9 +53,7 @@
         $isBlocked = $isAwaitingPayment || $subInfo->isExpired();
         $isSoon = $subInfo->isExpiringSoon(7);
         $trafficTotalBytes = isset($userSub?->traffic_total_bytes) ? (int) $userSub->traffic_total_bytes : null;
-        $trafficTotalBytesVless = isset($userSub?->traffic_total_bytes_vless) ? (int) $userSub->traffic_total_bytes_vless : null;
         $trafficGb = $trafficTotalBytes !== null ? ($trafficTotalBytes / 1073741824) : null;
-        $trafficGbVless = $trafficTotalBytesVless !== null ? ($trafficTotalBytesVless / 1073741824) : null;
 
         if ($subInfo->isExpired()) {
             $statusColorClass = 'text-red-600';
@@ -147,11 +152,6 @@
                     трафик Amnezia: {{ number_format($trafficGb, 2, '.', ' ') }} ГБ
                 </span>
             @endif
-            @if ($trafficGbVless !== null)
-                <span class="text-gray-600 service-block__status service-block__status--traffic block">
-                    трафик VLESS: {{ number_format($trafficGbVless, 2, '.', ' ') }} ГБ
-                </span>
-            @endif
         </div>
     </div>
 
@@ -204,11 +204,11 @@
             <a href="{{ route('user-subscription.switch-vpn-access-mode', ['user_subscription_id' => (int) $userSub->id, 'vpn_access_mode' => $switchTargetMode]) }}"
                class="js-sub-action service-block__action-btn service-block__action-btn--secondary"
                data-action="switch-mode"
-               data-overlay-message="Переключаем тип подключения..."
-               data-confirm="После переключения старый AmneziaWG-конфиг перестанет работать. VLESS останется без изменений. Нужно будет скачать и загрузить новый AmneziaWG-конфиг. Продолжить?"
+               data-overlay-message="Готовим новое подключение..."
+               data-confirm="{{ $switchWarningText }}"
                title="{{ $switchWarningText }}"
                aria-label="{{ $switchWarningText }}">
-                Переключить на {{ $switchTargetMode === \App\Models\Server::VPN_ACCESS_WHITE_IP ? 'белый IP' : 'обычный IP' }}
+                Переключить на {{ $switchTargetMode === \App\Models\Server::VPN_ACCESS_WHITE_IP ? 'подключение при ограничениях' : 'обычное подключение' }}
             </a>
         @endif
 
@@ -230,9 +230,13 @@
         <div class="service-block__price">
             <span>{{ number_format($priceCents / 100, 2, '.', ' ') }} ₽</span> / месяц
         </div>
-        @if ($canSwitchVpnAccessMode && $subInfo->isConnected() && !$subInfo->isExpired())
+        @if ($hasPendingVpnAccessModeSwitch && $pendingVpnAccessModeText)
+            <div class="service-block__switch-pending">
+                {{ $pendingVpnAccessModeText }}
+            </div>
+        @elseif ($canSwitchVpnAccessMode && $subInfo->isConnected() && !$subInfo->isExpired())
             <div class="service-block__switch-hint">
-                После переключения старый AmneziaWG-конфиг перестанет работать. VLESS не изменится.
+                После переключения старая настройка будет работать ещё 5 минут, затем отключится автоматически.
             </div>
         @endif
     </div>

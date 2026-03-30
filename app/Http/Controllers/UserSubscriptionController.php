@@ -75,6 +75,7 @@ class UserSubscriptionController extends Controller
                 'user_subscription_id' => (int) $userSub->id,
             ]),
             'fileUrl' => $subInfo->getFileUrl(),
+            'pendingVpnAccessModeDisconnectAt' => $userSub->pendingVpnAccessModeDisconnectAt(),
         ];
 
         $view = $protocol === 'tabbed'
@@ -530,6 +531,16 @@ class UserSubscriptionController extends Controller
             return redirect()->back()->with('subscription-error', 'Подписка не найдена.');
         }
 
+        if ($userSub->hasPendingVpnAccessModeSwitch()) {
+            $message = $this->vpnAccessModePendingMessage($userSub);
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 409, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
         $targetMode = Server::normalizeVpnAccessMode((string) $data['vpn_access_mode']);
         if ($userSub->resolveVpnAccessMode() === $targetMode) {
             if ($request->expectsJson()) {
@@ -540,7 +551,7 @@ class UserSubscriptionController extends Controller
         }
 
         try {
-            $updated = $switcher->switch($userSub, $targetMode);
+            $updated = $switcher->switchWithGracePeriod($userSub, $targetMode);
         } catch (\Throwable $e) {
             \Log::error('Subscription vpn access mode switch error: ' . $e->getMessage(), [
                 'user_id' => (int) Auth::id(),
@@ -555,7 +566,7 @@ class UserSubscriptionController extends Controller
             return redirect()->back()->with('subscription-error', 'Не удалось переключить тип подключения');
         }
 
-        $message = 'Тип подключения изменён. Скачайте новый конфиг для устройства.';
+        $message = $this->vpnAccessModePreparedMessage($updated);
 
         if ($request->expectsJson()) {
             return $this->subscriptionCardJson($updated->subscription, $message, (int) $updated->id);
@@ -670,5 +681,31 @@ class UserSubscriptionController extends Controller
         $finalPrice = $pricing->getFinalPriceCents($vpnSub, $referrer, $referral);
 
         return (int) ($finalPrice / 100);
+    }
+
+    private function vpnAccessModePreparedMessage(UserSubscription $userSub): string
+    {
+        $disconnectAt = $userSub->pendingVpnAccessModeDisconnectAt();
+        if (!$disconnectAt) {
+            return 'Новое подключение готово.';
+        }
+
+        return sprintf(
+            'Новое подключение готово. Старая настройка отключится автоматически в %s МСК.',
+            $disconnectAt->copy()->timezone('Europe/Moscow')->format('H:i')
+        );
+    }
+
+    private function vpnAccessModePendingMessage(UserSubscription $userSub): string
+    {
+        $disconnectAt = $userSub->pendingVpnAccessModeDisconnectAt();
+        if (!$disconnectAt) {
+            return 'Новое подключение уже подготовлено. Дождитесь автоматического отключения старой настройки.';
+        }
+
+        return sprintf(
+            'Новое подключение уже подготовлено. Старая настройка отключится автоматически в %s МСК.',
+            $disconnectAt->copy()->timezone('Europe/Moscow')->format('H:i')
+        );
     }
 }

@@ -40,7 +40,7 @@
                         @csrf
 
                         <div class="rounded-md bg-white p-3 shadow-sm">
-                            <label for="white_ip_server_id" class="mb-1 block text-sm font-medium text-gray-700">Подписки с белым IP</label>
+                            <label for="white_ip_server_id" class="mb-1 block text-sm font-medium text-gray-700">Подключение при ограничениях</label>
                             <select name="white_ip_server_id" id="white_ip_server_id" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
                                 <option value="">Не выбран</option>
                                 @foreach (($bundleServerOptions[\App\Models\Server::VPN_ACCESS_WHITE_IP] ?? collect()) as $option)
@@ -53,7 +53,7 @@
                                 @endforeach
                             </select>
                             <div class="mt-2 text-xs text-gray-500">
-                                Если пользователь ставит галочку `Нужен белый IP`, подписка создаётся здесь:
+                                Если пользователь включает опцию `Подключение при ограничениях`, подписка создаётся здесь:
                                 @if (!empty($effectiveBundleServers[\App\Models\Server::VPN_ACCESS_WHITE_IP]))
                                     #{{ $effectiveBundleServers[\App\Models\Server::VPN_ACCESS_WHITE_IP]->id }} · {{ $effectiveBundleServers[\App\Models\Server::VPN_ACCESS_WHITE_IP]->ip1 ?: ($effectiveBundleServers[\App\Models\Server::VPN_ACCESS_WHITE_IP]->node1_api_url ?: 'без IP') }}
                                 @else
@@ -63,7 +63,7 @@
                         </div>
 
                         <div class="rounded-md bg-white p-3 shadow-sm">
-                            <label for="regular_server_id" class="mb-1 block text-sm font-medium text-gray-700">Обычные подписки</label>
+                            <label for="regular_server_id" class="mb-1 block text-sm font-medium text-gray-700">Обычное подключение</label>
                             <select name="regular_server_id" id="regular_server_id" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
                                 <option value="">Не выбран</option>
                                 @foreach (($bundleServerOptions[\App\Models\Server::VPN_ACCESS_REGULAR] ?? collect()) as $option)
@@ -76,7 +76,7 @@
                                 @endforeach
                             </select>
                             <div class="mt-2 text-xs text-gray-500">
-                                Если галочку не ставит, подписка создаётся здесь:
+                                Если опция выключена, подписка создаётся здесь:
                                 @if (!empty($effectiveBundleServers[\App\Models\Server::VPN_ACCESS_REGULAR]))
                                     #{{ $effectiveBundleServers[\App\Models\Server::VPN_ACCESS_REGULAR]->id }} · {{ $effectiveBundleServers[\App\Models\Server::VPN_ACCESS_REGULAR]->ip1 ?: ($effectiveBundleServers[\App\Models\Server::VPN_ACCESS_REGULAR]->node1_api_url ?: 'без IP') }}
                                 @else

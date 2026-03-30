@@ -65,8 +65,8 @@ class Server extends Model
     public static function vpnAccessModeOptions(): array
     {
         return [
-            self::VPN_ACCESS_WHITE_IP => 'AWG с белым IP + VLESS',
-            self::VPN_ACCESS_REGULAR => 'Обычный AWG + VLESS',
+            self::VPN_ACCESS_WHITE_IP => 'Подключение при ограничениях',
+            self::VPN_ACCESS_REGULAR => 'Обычное подключение',
         ];
     }
 

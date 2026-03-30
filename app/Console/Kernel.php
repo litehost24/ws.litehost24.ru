@@ -47,6 +47,9 @@ class Kernel extends ConsoleKernel
         // Heal unexpected "active in DB, disabled on node1" drifts after traffic collection.
         $schedule->command('subscriptions:reconcile-server-state')->everyMinute();
 
+        // Finish grace-period VPN mode switches by disabling old peers after the timeout.
+        $schedule->command('subscriptions:complete-vpn-access-switches')->everyMinute()->withoutOverlapping();
+
         // Enforce single-protocol usage: disable VLESS for 1 hour on dual-protocol activity.
         $schedule->command('subscriptions:enforce-vless-rule')->everyFiveMinutes();
     }

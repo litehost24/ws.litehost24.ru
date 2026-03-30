@@ -98,7 +98,7 @@
                                 </div>
                                 <label class="inline-flex h-10 items-center gap-2 rounded-md border border-gray-300 bg-gray-50 px-3 text-sm text-gray-700">
                                     <input type="checkbox" name="need_white_ip" value="1" class="rounded border-gray-300" checked>
-                                    <span>Нужен белый IP</span>
+                                    <span>Подключение при ограничениях</span>
                                 </label>
                                 <button type="submit" class="btn btn-primary" style="height:40px;">
                                     Купить подписку
@@ -108,7 +108,8 @@
                                 </button>
                             </div>
                             <div class="mt-2 text-xs text-gray-500">
-                                Отмечено: AWG с белым IP + запасной VLESS. Не отмечено: обычный AWG + запасной VLESS.
+                                Включено: подключение при ограничениях. Выключено: обычное подключение.
+                                Если обычное подключение не работает или интернет работает с ограничениями, включите этот вариант.
                             </div>
                         </form>
                     @endif
@@ -370,6 +371,18 @@
         color: #6b7280;
         font-size: 12px;
     }
+    .service-block__switch-pending {
+        width: 100%;
+        margin-top: 8px;
+        padding: 10px 12px;
+        border: 1px solid #bfdbfe;
+        border-radius: 12px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.45;
+    }
     .service-block__instruction-cta {
         display: flex;
         align-items: center;
@@ -423,6 +436,17 @@
     }
     .instruction-tabs {
         margin: 0 0 18px;
+    }
+    .instruction-tabs__notice {
+        margin: 0 0 14px;
+        padding: 12px 14px;
+        border: 1px solid #bfdbfe;
+        border-radius: 12px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-size: 13px;
+        line-height: 1.45;
+        font-weight: 600;
     }
     .instruction-tabs__bar {
         display: flex;
@@ -577,6 +601,90 @@
             width: 100%;
         }
     }
+    .page-confirm-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(15, 23, 42, 0.5);
+        z-index: 10010;
+    }
+    .page-confirm-dialog {
+        width: min(520px, 100%);
+        padding: 22px 22px 18px;
+        border-radius: 18px;
+        border: 1px solid #dbe3ef;
+        background: #fff;
+        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.22);
+    }
+    .page-confirm-title {
+        margin: 0;
+        color: #0f172a;
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.15;
+    }
+    .page-confirm-text {
+        margin-top: 12px;
+        color: #475569;
+        font-size: 15px;
+        line-height: 1.6;
+        white-space: pre-line;
+    }
+    .page-confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+    }
+    .page-confirm-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 112px;
+        height: 42px;
+        padding: 0 18px;
+        border-radius: 9999px;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        color: #334155;
+        font-size: 15px;
+        font-weight: 600;
+        transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+    }
+    .page-confirm-btn:hover {
+        background: #f1f5f9;
+    }
+    .page-confirm-btn--primary {
+        border-color: #3b82f6;
+        background: #1d4ed8;
+        color: #fff;
+    }
+    .page-confirm-btn--primary:hover {
+        border-color: #1d4ed8;
+        background: #1e40af;
+        color: #fff;
+    }
+    @media (max-width: 640px) {
+        .page-confirm-dialog {
+            padding: 18px 18px 16px;
+            border-radius: 16px;
+        }
+        .page-confirm-title {
+            font-size: 21px;
+        }
+        .page-confirm-text {
+            font-size: 14px;
+        }
+        .page-confirm-actions {
+            flex-direction: column-reverse;
+        }
+        .page-confirm-btn {
+            width: 100%;
+        }
+    }
 </style>
 </x-app-layout>
 
@@ -704,6 +812,82 @@
         window.__toastTimer = setTimeout(() => {
             hideToast();
         }, 2500);
+    }
+    function ensureConfirmModal() {
+        let overlay = document.getElementById('page-confirm-overlay');
+        if (overlay) {
+            return overlay;
+        }
+
+        overlay = document.createElement('div');
+        overlay.id = 'page-confirm-overlay';
+        overlay.className = 'page-confirm-overlay';
+        overlay.innerHTML = `
+            <div class="page-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="page-confirm-title" aria-describedby="page-confirm-text">
+                <h3 id="page-confirm-title" class="page-confirm-title">Внимание</h3>
+                <div id="page-confirm-text" class="page-confirm-text"></div>
+                <div class="page-confirm-actions">
+                    <button type="button" class="page-confirm-btn" data-confirm-cancel>Отмена</button>
+                    <button type="button" class="page-confirm-btn page-confirm-btn--primary" data-confirm-ok>Продолжить</button>
+                </div>
+            </div>
+        `;
+
+        function finish(result) {
+            if (!overlay.__resolver) {
+                return;
+            }
+
+            const resolve = overlay.__resolver;
+            overlay.__resolver = null;
+            overlay.style.display = 'none';
+            document.body.style.overflow = '';
+            resolve(result);
+        }
+
+        overlay.addEventListener('click', function (event) {
+            if (event.target === overlay) {
+                finish(false);
+            }
+        });
+
+        overlay.querySelector('[data-confirm-cancel]').addEventListener('click', function () {
+            finish(false);
+        });
+
+        overlay.querySelector('[data-confirm-ok]').addEventListener('click', function () {
+            finish(true);
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && overlay.style.display === 'flex') {
+                finish(false);
+            }
+        });
+
+        document.body.appendChild(overlay);
+
+        return overlay;
+    }
+    function showConfirmModal(message, title) {
+        const overlay = ensureConfirmModal();
+        const titleEl = overlay.querySelector('#page-confirm-title');
+        const textEl = overlay.querySelector('#page-confirm-text');
+        const okBtn = overlay.querySelector('[data-confirm-ok]');
+
+        titleEl.textContent = title || 'Внимание';
+        textEl.textContent = message || '';
+
+        overlay.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+
+        return new Promise(function (resolve) {
+            overlay.__resolver = resolve;
+
+            setTimeout(function () {
+                okBtn.focus();
+            }, 0);
+        });
     }
     function insertSubscriptionCard(cardHtml) {
         const rows = document.querySelector('.service-block__rows');
@@ -956,9 +1140,15 @@
             link.dataset.busy = '1';
 
             const confirmText = link.getAttribute('data-confirm');
-            if (confirmText && !window.confirm(confirmText)) {
-                link.dataset.busy = '';
-                return;
+            if (confirmText) {
+                const confirmed = await showConfirmModal(
+                    confirmText,
+                    link.getAttribute('data-confirm-title') || 'Внимание'
+                );
+                if (!confirmed) {
+                    link.dataset.busy = '';
+                    return;
+                }
             }
 
             link.classList.add('opacity-60');
@@ -977,6 +1167,8 @@
             if (action !== 'disable') {
                 showOverlay(link.dataset.overlayMessage || 'Подключаем подписку...');
             }
+
+            let instructionSubIdToOpen = null;
 
             try {
                 const response = await fetch(link.href, {
@@ -1000,11 +1192,20 @@
                         attachNoteForms(updatedRows);
                         attachSubActionLinks(updatedRows);
                     }
+
+                    if (action === 'switch-mode') {
+                        const updatedCard = findSubscriptionCardByHtml(data.card_html);
+                        instructionSubIdToOpen = getInstructionSubId(updatedCard);
+                    }
                 } else if (data.card_html) {
                     const updatedCard = replaceSubscriptionCard(data.card_html, null, sourceCard);
                     if (updatedCard) {
                         attachNoteForms(updatedCard);
                         attachSubActionLinks(updatedCard);
+
+                        if (action === 'switch-mode') {
+                            instructionSubIdToOpen = getInstructionSubId(updatedCard);
+                        }
                     }
                 }
                 updateBalance(data.balance_rub);
@@ -1016,6 +1217,11 @@
                 link.style.pointerEvents = '';
                 hideOverlay();
                 link.dataset.busy = '';
+                if (instructionSubIdToOpen) {
+                    setTimeout(function () {
+                        openInstructionModal(instructionSubIdToOpen);
+                    }, 120);
+                }
             }
         });
     }
