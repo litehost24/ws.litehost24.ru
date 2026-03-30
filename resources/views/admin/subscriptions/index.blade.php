@@ -395,17 +395,24 @@
                                                     >
                                                         {{ $networkBadge['label'] }}
                                                     </span>
-                                                    <button
-                                                        type="button"
-                                                        class="{{ $nameClasses }}"
-                                                        data-tooltip="{{ $refLabel }}"
-                                                        data-user-id="{{ $first->user_id }}"
-                                                    >
-                                                        @if($first->effective_status === 'working' && $firstDualProtocolTraffic)
-                                                            <span class="me-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-yellow-100 text-yellow-800 font-bold" title="Трафик в двух протоколах">!</span>
+                                                    <div class="flex min-w-0 flex-col">
+                                                        <button
+                                                            type="button"
+                                                            class="{{ $nameClasses }}"
+                                                            data-tooltip="{{ $refLabel }}"
+                                                            data-user-id="{{ $first->user_id }}"
+                                                        >
+                                                            @if($first->effective_status === 'working' && $firstDualProtocolTraffic)
+                                                                <span class="me-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-yellow-100 text-yellow-800 font-bold" title="Трафик в двух протоколах">!</span>
+                                                            @endif
+                                                            {{ $first->user->name ?? 'N/A' }}
+                                                        </button>
+                                                        @if($first->user?->created_at)
+                                                            <span class="mt-0.5 text-[11px] leading-4 text-gray-500">
+                                                                {{ $first->user->created_at->format('d.m.Y H:i') }}
+                                                            </span>
                                                         @endif
-                                                        {{ $first->user->name ?? 'N/A' }}
-                                                    </button>
+                                                    </div>
                                                 </div>
                                                 <span class="inline-flex items-center gap-1">
                                                     <button
