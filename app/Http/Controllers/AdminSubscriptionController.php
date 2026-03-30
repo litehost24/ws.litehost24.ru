@@ -14,11 +14,11 @@ use App\Models\VpnEndpointNetwork;
 use App\Models\VpnPeerServerState;
 use App\Models\VpnPeerTrafficDaily;
 use App\Models\VpnPeerTrafficSnapshot;
-use App\Models\components\InboundManagerVless;
 use App\Services\VpnEndpointNetworkResolver;
-use App\Services\VpnAgent\Node1Provisioner;
+use App\Services\VpnAgent\SubscriptionPeerOperator;
 use App\Services\VpnAgent\SubscriptionVpnAccessModeSwitcher;
 use App\Support\AmneziaSharingDetector;
+use App\Support\SubscriptionBundleMeta;
 use App\Support\VpnPeerName;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\DB;
@@ -784,24 +784,24 @@ class AdminSubscriptionController extends Controller
             return [false, $error];
         }
 
+        $peerOperator = app(SubscriptionPeerOperator::class);
+
         if ($server->usesNode1Api()) {
             try {
-                (new Node1Provisioner())->disableByName($server, $peerName);
+                $peerOperator->disableNodePeer($server, $peerName, true);
+                $peerOperator->syncServerState($server, $peerName, 'disabled', (int) $userSub->user_id);
             } catch (\Throwable $e) {
-                $message = $e->getMessage();
-                $normalized = strtolower($message);
-                if (!str_contains($normalized, 'not found') && !str_contains($normalized, 'missing')) {
-                    return [false, $message];
-                }
+                return [false, $e->getMessage()];
             }
         } else {
-            $inboundManager = new InboundManagerVless($server->url1);
             try {
-                $result = $inboundManager->disableInbound($peerName, $server->username1, $server->password1);
-                if (!$this->isSuccess($result)) {
+                $peerOperator->disableInboundPeer($server, $peerName);
+                $peerOperator->syncServerState($server, $peerName, 'disabled', (int) $userSub->user_id);
+            } catch (\Throwable $e) {
+                if ($e->getMessage() === 'unsuccessful response') {
                     return [false, 'Не удалось отключить inbound'];
                 }
-            } catch (\Throwable $e) {
+
                 return [false, 'Ошибка отключения inbound: ' . $e->getMessage()];
             }
         }
@@ -816,36 +816,16 @@ class AdminSubscriptionController extends Controller
             return [false, 'file_path пуст', null, null];
         }
 
-        $filename = basename($path);
-        $parts = explode('_', $filename);
-        if (!isset($parts[1], $parts[2])) {
+        $meta = SubscriptionBundleMeta::fromFilePath($path);
+        if ($meta === null) {
             return [false, 'Не удалось разобрать имя peer/server_id из file_path', null, null];
         }
 
-        $peerName = trim((string) $parts[1]);
-        $serverId = (int) $parts[2];
-        if ($peerName === '' || $serverId <= 0) {
-            return [false, 'Некорректные данные в file_path', null, null];
-        }
-
-        $server = Server::query()->find($serverId);
+        $server = Server::query()->find($meta->serverId());
         if (!$server) {
-            return [false, "Сервер не найден (id={$serverId})", null, null];
+            return [false, "Сервер не найден (id={$meta->serverId()})", null, null];
         }
 
-        return [true, null, $server, $peerName];
-    }
-
-    private function isSuccess($result): bool
-    {
-        if (is_array($result) && array_key_exists('success', $result)) {
-            return (bool) $result['success'];
-        }
-
-        if (is_bool($result)) {
-            return $result;
-        }
-
-        return $result !== null;
+        return [true, null, $server, $meta->peerName()];
     }
 }

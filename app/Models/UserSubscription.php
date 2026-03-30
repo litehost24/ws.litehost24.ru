@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\VpnPeerName;
+use App\Support\SubscriptionBundleMeta;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -455,22 +456,7 @@ class UserSubscription extends Model
 
     private static function extractServerIdFromFilePath(?string $filePath): ?int
     {
-        if (!is_string($filePath) || trim($filePath) === '') {
-            return null;
-        }
-
-        $base = pathinfo(basename($filePath), PATHINFO_FILENAME);
-        if ($base === '') {
-            return null;
-        }
-
-        $parts = explode('_', $base);
-        if (count($parts) < 3) {
-            return null;
-        }
-
-        $serverId = (int) $parts[2];
-        return $serverId > 0 ? $serverId : null;
+        return SubscriptionBundleMeta::fromFilePath($filePath)?->serverId();
     }
 
     public function subscription(): BelongsTo

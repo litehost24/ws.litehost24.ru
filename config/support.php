@@ -9,6 +9,11 @@ return [
         'email_to' => env('SUPPORT_CONTACT_EMAIL_TO', '4743383@gmail.com'),
     ],
 
+    'admin' => [
+        // Where to send internal admin notifications about subscriptions and automation.
+        'email_to' => env('SUPPORT_ADMIN_EMAIL_TO', env('SUPPORT_CONTACT_EMAIL_TO', '4743383@gmail.com')),
+    ],
+
     'telegram' => [
         'bot_token' => env('TELEGRAM_BOT_TOKEN', ''),
         'api_base_url' => env('TELEGRAM_API_BASE_URL', 'https://api.telegram.org'),

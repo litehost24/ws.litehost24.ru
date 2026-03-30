@@ -5,6 +5,7 @@ namespace App\Services\VpnAgent;
 use App\Models\Server;
 use App\Models\UserSubscription;
 use App\Models\components\WireguardQrCode;
+use App\Support\SubscriptionBundleMeta;
 use App\Support\VpnPeerName;
 use Exception;
 use Illuminate\Support\Facades\Log;
@@ -24,11 +25,12 @@ class SubscriptionWireguardConfigResolver
 
     private function resolveFromNode1Api(UserSubscription $subscription): string
     {
-        $serverId = $this->extractServerIdFromFilePath((string) ($subscription->file_path ?? ''));
-        if ($serverId === null) {
+        $meta = SubscriptionBundleMeta::fromFilePath((string) ($subscription->file_path ?? ''));
+        if ($meta === null) {
             return '';
         }
 
+        $serverId = $meta->serverId();
         $server = Server::query()->find($serverId);
         if (!$server || !$server->usesNode1Api()) {
             return '';
@@ -96,22 +98,5 @@ class SubscriptionWireguardConfigResolver
         }
 
         return WireguardQrCode::normalizeConfig($content);
-    }
-
-    private function extractServerIdFromFilePath(string $filePath): ?int
-    {
-        $base = pathinfo(basename($filePath), PATHINFO_FILENAME);
-        if ($base === '') {
-            return null;
-        }
-
-        $parts = explode('_', $base);
-        if (count($parts) < 3) {
-            return null;
-        }
-
-        $serverId = (int) ($parts[2] ?? 0);
-
-        return $serverId > 0 ? $serverId : null;
     }
 }

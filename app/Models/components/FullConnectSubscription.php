@@ -8,15 +8,14 @@ use App\Models\components\SubscriptionPackageBuilder;
 use App\Models\Subscription;
 use App\Models\UserSubscription;
 use App\Services\ReferralPricingService;
+use App\Services\VpnAgent\SubscriptionPeerOperator;
+use App\Support\SubscriptionBundleMeta;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\NotFoundExceptionInterface;
-use Illuminate\Support\Facades\Storage;
 use App\Models\Server;
-use App\Services\VpnAgent\Node1Provisioner;
-use App\Models\components\InboundManagerVless;
 use Exception;
 
 class FullConnectSubscription
@@ -100,13 +99,7 @@ class FullConnectSubscription
             $pricing->applyEarning($created, $this->sub, $referrer, $referral);
         }
 
-        try {
-            Mail::to('4743383@gmail.com')->send(new ForAdminMail([
-                'action' => 'Подключение',
-            ]));
-        } catch (Exception $e) {
-            \Log::warning('Admin mail send failed: ' . $e->getMessage());
-        }
+        $this->notifyAdmin('Подключение');
     }
 
     public function activate(): void
@@ -178,31 +171,28 @@ class FullConnectSubscription
             //Р В°Р С”РЎвЂљР С‘Р Р†Р В°РЎвЂ Р С‘РЎРЏ
 
             // Р СџР С•Р В»РЎС“РЎвЂЎР В°Р ВµР С Р С‘Р СРЎРЏ РЎвЂћР В°Р в„–Р В»Р В° Р С‘Р В· РЎРѓРЎвЂљРЎР‚Р С•Р С”Р С‘ $d
-            $filename = basename($file_path);
-            // Р В Р В°Р В·Р В±Р С‘Р Р†Р В°Р ВµР С Р С‘Р СРЎРЏ РЎвЂћР В°Р в„–Р В»Р В° Р С—Р С• РЎР‚Р В°Р В·Р Т‘Р ВµР В»Р С‘РЎвЂљР ВµР В»РЎР‹ _
-            $parts = explode('_', $filename);
+            $meta = SubscriptionBundleMeta::fromFilePath($file_path);
+            if ($meta !== null) {
+                $server = Server::query()->find($meta->serverId());
 
-            if(isset($parts[2])) {
-                $server = Server::where('id', $parts[2])->first();
-
-                if($server) {
-
-
+                if ($server) {
                     if ($server->usesNode1Api()) {
                         try {
-                            (new Node1Provisioner())->enableByName($server, $parts[1]);
+                            $this->peerOperator()->enableNodePeer($server, $meta->peerName());
+                            $this->peerOperator()->syncServerState($server, $meta->peerName(), 'enabled', (int) Auth::user()->id);
                         } catch (\Exception $e) {
-                            $this->notifyAdmin("Ошибка включения node1 API (manual activation). user_id=" . Auth::user()->id . ", sub_id={$this->sub->id}, server_id={$server->id}, name={$parts[1]}. {$e->getMessage()}");
+                            $this->notifyAdmin("Ошибка включения node1 API (manual activation). user_id=" . Auth::user()->id . ", sub_id={$this->sub->id}, server_id={$server->id}, name={$meta->peerName()}. {$e->getMessage()}");
                         }
                     } else {
-                        $inboundManager = new \App\Models\components\InboundManagerVless($server->url1);
                         try {
-                            $result = $inboundManager->enableInbound($parts[1], $server->username1, $server->password1);
-                            if (!$this->isSuccess($result)) {
-                                $this->notifyAdmin("Не удалось включить inbound (manual activation). user_id=" . Auth::user()->id . ", sub_id={$this->sub->id}, server_id={$server->id}, remark={$parts[1]}");
-                            }
+                            $this->peerOperator()->enableInboundPeer($server, $meta->peerName());
+                            $this->peerOperator()->syncServerState($server, $meta->peerName(), 'enabled', (int) Auth::user()->id);
                         } catch (\Exception $e) {
-                            $this->notifyAdmin("Ошибка включения inbound (manual activation). user_id=" . Auth::user()->id . ", sub_id={$this->sub->id}, server_id={$server->id}, remark={$parts[1]}. {$e->getMessage()}");
+                            if ($e->getMessage() === 'unsuccessful response') {
+                                $this->notifyAdmin("Не удалось включить inbound (manual activation). user_id=" . Auth::user()->id . ", sub_id={$this->sub->id}, server_id={$server->id}, remark={$meta->peerName()}");
+                            } else {
+                                $this->notifyAdmin("Ошибка включения inbound (manual activation). user_id=" . Auth::user()->id . ", sub_id={$this->sub->id}, server_id={$server->id}, remark={$meta->peerName()}. {$e->getMessage()}");
+                            }
                         }
                     }
                 }
@@ -327,28 +317,25 @@ class FullConnectSubscription
         }
     }
 
-    private function isSuccess($result): bool
-    {
-        if (is_array($result) && array_key_exists('success', $result)) {
-            return (bool) $result['success'];
-        }
-
-        if (is_bool($result)) {
-            return $result;
-        }
-
-        return $result !== null;
-    }
-
     private function notifyAdmin(string $message): void
     {
+        $recipient = trim((string) config('support.admin.email_to', config('support.contact.email_to', '')));
+        if ($recipient === '') {
+            return;
+        }
+
         try {
-            Mail::to('4743383@gmail.com')->send(new ForAdminMail([
+            Mail::to($recipient)->send(new ForAdminMail([
                 'action' => $message,
             ]));
         } catch (\Exception $e) {
             \Log::error('Admin уведомление не отправлено: ' . $e->getMessage());
         }
+    }
+
+    private function peerOperator(): SubscriptionPeerOperator
+    {
+        return app(SubscriptionPeerOperator::class);
     }
 }
 

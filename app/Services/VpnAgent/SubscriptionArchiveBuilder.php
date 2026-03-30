@@ -4,6 +4,7 @@ namespace App\Services\VpnAgent;
 
 use App\Models\UserSubscription;
 use App\Models\components\WireguardQrCode;
+use App\Support\SubscriptionBundleMeta;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\View;
 use RuntimeException;
@@ -105,13 +106,9 @@ class SubscriptionArchiveBuilder
 
     private function deriveFolderName(UserSubscription $subscription): string
     {
-        $filePath = trim((string) ($subscription->file_path ?? ''));
-        $base = pathinfo(basename($filePath), PATHINFO_FILENAME);
-        if ($base !== '') {
-            $parts = explode('_', $base);
-            if (count($parts) >= 3 && $parts[1] !== '' && $parts[2] !== '') {
-                return $parts[1] . '_' . $parts[2];
-            }
+        $meta = SubscriptionBundleMeta::fromFilePath((string) ($subscription->file_path ?? ''));
+        if ($meta !== null) {
+            return $meta->folderName();
         }
 
         return 'subscription_' . (int) ($subscription->id ?? 0);

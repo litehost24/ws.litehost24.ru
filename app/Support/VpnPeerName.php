@@ -18,28 +18,16 @@ class VpnPeerName
 
     public static function fromFilePath(?string $filePath, ?int $serverId = null): ?string
     {
-        if (!is_string($filePath) || trim($filePath) === '') {
+        $meta = SubscriptionBundleMeta::fromFilePath($filePath);
+        if ($meta === null) {
             return null;
         }
 
-        $base = pathinfo(basename($filePath), PATHINFO_FILENAME);
-        if ($base === '') {
+        if ($serverId !== null && $meta->serverId() !== $serverId) {
             return null;
         }
 
-        $parts = explode('_', $base);
-        if (count($parts) < 3 || trim((string) $parts[1]) === '') {
-            return null;
-        }
-
-        if ($serverId !== null) {
-            $serverIdFromPath = (int) $parts[2];
-            if ($serverIdFromPath !== $serverId) {
-                return null;
-            }
-        }
-
-        return trim((string) $parts[1]);
+        return $meta->peerName();
     }
 
     public static function fromConnectionConfig(?string $connectionConfig): ?string

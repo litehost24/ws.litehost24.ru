@@ -4,17 +4,19 @@ namespace App\Services\VpnAgent;
 
 use App\Models\Server;
 use App\Models\UserSubscription;
-use App\Models\VpnPeerServerState;
-use App\Models\components\InboundManagerVless;
 use App\Models\components\SubscriptionPackageBuilder;
 use App\Support\VpnPeerName;
 use Exception;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Schema;
 
 class SubscriptionVpnAccessModeSwitcher
 {
     public const USER_SWITCH_GRACE_MINUTES = 5;
+
+    public function __construct(
+        private readonly SubscriptionPeerOperator $peerOperator,
+    ) {
+    }
 
     /**
      * @throws Exception
@@ -49,11 +51,11 @@ class SubscriptionVpnAccessModeSwitcher
             ->buildForEmail($peerName);
 
         $this->enableTarget($targetServer, $peerName);
-        $this->syncServerState($targetServer, $peerName, 'enabled', (int) $subscription->user_id);
+        $this->peerOperator->syncServerState($targetServer, $peerName, 'enabled', (int) $subscription->user_id);
 
         try {
             $this->disableSource($currentServer, $targetServer, $peerName);
-            $this->syncServerState($currentServer, $peerName, 'disabled', (int) $subscription->user_id);
+            $this->peerOperator->syncServerState($currentServer, $peerName, 'disabled', (int) $subscription->user_id);
         } catch (\Throwable $e) {
             $this->rollbackTarget($targetServer, $peerName);
             throw new Exception('Не удалось отключить старый сервер: ' . $e->getMessage(), 0, $e);
@@ -112,7 +114,7 @@ class SubscriptionVpnAccessModeSwitcher
             ->buildForEmail($peerName);
 
         $this->enableTarget($targetServer, $peerName);
-        $this->syncServerState($targetServer, $peerName, 'enabled', (int) $subscription->user_id);
+        $this->peerOperator->syncServerState($targetServer, $peerName, 'enabled', (int) $subscription->user_id);
 
         $disconnectAt = $disconnectAt ?: Carbon::now()->addMinutes(self::USER_SWITCH_GRACE_MINUTES);
 
@@ -159,7 +161,7 @@ class SubscriptionVpnAccessModeSwitcher
 
         try {
             $this->disableSource($sourceServer, $targetServer, $peerName);
-            $this->syncServerState($sourceServer, $peerName, 'disabled', (int) $subscription->user_id);
+            $this->peerOperator->syncServerState($sourceServer, $peerName, 'disabled', (int) $subscription->user_id);
         } catch (\Throwable $e) {
             $subscription->update([
                 'pending_vpn_access_mode_error' => $e->getMessage(),
@@ -178,12 +180,8 @@ class SubscriptionVpnAccessModeSwitcher
      */
     private function enableTarget(Server $targetServer, string $peerName): void
     {
-        if (app()->environment('testing')) {
-            return;
-        }
-
         if ($targetServer->usesNode1Api()) {
-            (new Node1Provisioner())->enableByName($targetServer, $peerName);
+            $this->peerOperator->enableNodePeer($targetServer, $peerName);
         }
     }
 
@@ -192,69 +190,30 @@ class SubscriptionVpnAccessModeSwitcher
      */
     private function disableSource(?Server $currentServer, Server $targetServer, string $peerName): void
     {
-        if (app()->environment('testing')) {
-            return;
-        }
-
         if (!$currentServer || (int) $currentServer->id === (int) $targetServer->id) {
             return;
         }
 
         if ($currentServer->usesNode1Api()) {
-            try {
-                (new Node1Provisioner())->disableByName($currentServer, $peerName);
-            } catch (\Throwable $e) {
-                $normalized = mb_strtolower($e->getMessage());
-                if (!str_contains($normalized, 'not found') && !str_contains($normalized, 'missing')) {
-                    throw $e;
-                }
-            }
+            $this->peerOperator->disableNodePeer($currentServer, $peerName, true);
         } elseif (trim((string) $currentServer->url1) !== '') {
-            $manager = new InboundManagerVless((string) $currentServer->url1);
-            $result = $manager->disableInbound($peerName, (string) $currentServer->username1, (string) $currentServer->password1);
-            if (!$this->isSuccess($result)) {
-                throw new Exception('Не удалось отключить старый AWG peer.');
+            try {
+                $this->peerOperator->disableInboundPeer($currentServer, $peerName);
+            } catch (\Throwable $e) {
+                throw new Exception('Не удалось отключить старый AWG peer.', 0, $e);
             }
         }
-
     }
 
     private function rollbackTarget(Server $targetServer, string $peerName): void
     {
-        if (app()->environment('testing')) {
-            return;
-        }
-
         try {
             if ($targetServer->usesNode1Api()) {
-                (new Node1Provisioner())->disableByName($targetServer, $peerName);
+                $this->peerOperator->disableNodePeer($targetServer, $peerName, true);
             }
-            $this->syncServerState($targetServer, $peerName, 'disabled');
+            $this->peerOperator->syncServerState($targetServer, $peerName, 'disabled');
         } catch (\Throwable) {
         }
-    }
-
-    private function syncServerState(?Server $server, string $peerName, string $status, ?int $userId = null): void
-    {
-        if (!$server || (int) ($server->id ?? 0) <= 0 || trim($peerName) === '') {
-            return;
-        }
-
-        if (!Schema::hasTable('vpn_peer_server_states')) {
-            return;
-        }
-
-        VpnPeerServerState::query()->updateOrCreate(
-            [
-                'server_id' => (int) $server->id,
-                'peer_name' => $peerName,
-            ],
-            [
-                'user_id' => $userId,
-                'server_status' => $status,
-                'status_fetched_at' => Carbon::now(),
-            ]
-        );
     }
 
     /**
@@ -268,18 +227,5 @@ class SubscriptionVpnAccessModeSwitcher
             'pending_vpn_access_mode_disconnect_at' => null,
             'pending_vpn_access_mode_error' => null,
         ];
-    }
-
-    private function isSuccess($result): bool
-    {
-        if (is_array($result) && array_key_exists('success', $result)) {
-            return (bool) $result['success'];
-        }
-
-        if (is_bool($result)) {
-            return $result;
-        }
-
-        return $result !== null;
     }
 }

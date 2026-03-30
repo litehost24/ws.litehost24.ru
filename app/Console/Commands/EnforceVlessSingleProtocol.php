@@ -9,6 +9,7 @@ use App\Models\UserSubscription;
 use App\Models\VpnPeerTrafficSnapshot;
 use App\Models\components\UserManagerVless;
 use App\Services\Telegram\TelegramBotService;
+use App\Support\InterpretsOperationResult;
 use App\Support\VpnPeerName;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\Schema;
 
 class EnforceVlessSingleProtocol extends Command
 {
+    use InterpretsOperationResult;
+
     protected $signature = 'subscriptions:enforce-vless-rule {--window=5 : Minutes for dual-protocol detection} {--dry-run : Do not change server or DB}';
     protected $description = 'Disable VLESS for 1 hour if both protocols are active in the last N minutes';
 
@@ -180,7 +183,7 @@ class EnforceVlessSingleProtocol extends Command
         try {
             $userManager = new UserManagerVless($server->url2);
             $result = $userManager->disableUser($peerName, $server->username2, $server->password2);
-            if (!$this->isSuccess($result)) {
+            if (!$this->isSuccessfulResult($result)) {
                 Log::warning('VLESS auto-block failed', ['sub_id' => $sub->id, 'peer' => $peerName, 'server_id' => $serverId, 'result' => $result]);
                 return false;
             }
@@ -215,7 +218,7 @@ class EnforceVlessSingleProtocol extends Command
         try {
             $userManager = new UserManagerVless($server->url2);
             $result = $userManager->enableUser($peerName, $server->username2, $server->password2);
-            if (!$this->isSuccess($result)) {
+            if (!$this->isSuccessfulResult($result)) {
                 Log::warning('VLESS auto-unblock failed', ['sub_id' => $sub->id, 'peer' => $peerName, 'server_id' => $serverId, 'result' => $result]);
                 return false;
             }
@@ -289,16 +292,4 @@ class EnforceVlessSingleProtocol extends Command
         return $serverId > 0 ? $serverId : null;
     }
 
-    private function isSuccess($result): bool
-    {
-        if (is_array($result) && array_key_exists('success', $result)) {
-            return (bool) $result['success'];
-        }
-
-        if (is_bool($result)) {
-            return $result;
-        }
-
-        return $result !== null;
-    }
 }
