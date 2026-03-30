@@ -1,0 +1,262 @@
+<?php
+
+namespace App\Models;
+
+use App\Support\VpnPeerName;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * @property integer $id
+ * @property integer $subscription_id
+ * @property integer $user_id
+ * @property integer $price
+ * @property string  $action - possible variables: create, activate, deactivate
+ * @property boolean $is_processed
+ * @property boolean $is_rebilling
+ * @property Carbon  $end_date
+ * @property string  $file_path
+ * @property string  $note
+ * @property Carbon  $created_at
+ * @property Carbon  $updated_at
+ * @property Subscription $subscription
+ *
+ * @method static create(array $array)
+ * @method static where(string $string, mixed $string, ?string $string)
+ * @method static orderBy(string $string, string $string1)
+ */
+class UserSubscription extends Model
+{
+    use HasFactory;
+
+    public const AWAIT_PAYMENT_DATE = '9999-01-01';
+
+    protected $fillable = [
+        'subscription_id',
+        'user_id',
+        'price',
+        'action',
+        'is_processed',
+        'is_rebilling',
+        'end_date',
+        'file_path',
+        'connection_config',
+        'note',
+    ];
+
+    public static function whereIsConnected(): UserSubscription|Builder
+    {
+        return UserSubscription::where('user_id', Auth::user()->id)
+            ->where(function ($query) {
+                $query->whereDate('end_date', '>', Carbon::today()->toDateString()) // РђРєС‚РёРІРЅС‹Рµ РїРѕРґРїРёСЃРєРё
+                      ->orWhere(function ($q) { // РР»Рё РїРѕРґРїРёСЃРєРё, РєРѕС‚РѕСЂС‹Рµ РёСЃС‚РµРєР»Рё, РЅРѕ РѕР¶РёРґР°СЋС‚ РѕРїР»Р°С‚С‹
+                          $q->whereDate('end_date', '<=', Carbon::today()->toDateString())
+                            ->where('is_processed', false)
+                            ->where('is_rebilling', true);
+                      })
+                      ->orWhere('end_date', UserSubscription::AWAIT_PAYMENT_DATE); // РР»Рё РїРѕРґРїРёСЃРєРё, РѕР¶РёРґР°СЋС‰РёРµ РѕРїР»Р°С‚С‹ СЃ РѕСЃРѕР±РѕР№ РґР°С‚РѕР№
+            });
+    }
+
+    public static function getActiveList(): Collection
+    {
+        // РџРѕР»СѓС‡Р°РµРј РїРѕСЃР»РµРґРЅРёРµ Р·Р°РїРёСЃРё РґР»СЏ РєР°Р¶РґРѕР№ РїР°СЂС‹ user_id Рё subscription_id РёР· С‡РёСЃР»Р° РїРѕРґРєР»СЋС‡РµРЅРЅС‹С…
+        $connectedSubs = UserSubscription::whereIsConnected()
+            ->orderBy('id', 'desc')
+            ->get()
+            ->load('subscription');
+
+        $uniqueSubs = collect([]);
+        $processedPairs = [];
+
+        foreach ($connectedSubs as $sub) {
+            $pairKey = $sub->user_id . '_' . $sub->subscription_id;
+            if (!in_array($pairKey, $processedPairs)) {
+                $uniqueSubs->push($sub);
+                $processedPairs[] = $pairKey;
+            }
+        }
+
+        return $uniqueSubs;
+    }
+
+    public static function attachTrafficTotals(Collection $subscriptions): Collection
+    {
+        if ($subscriptions->isEmpty()) {
+            return $subscriptions;
+        }
+
+        if (!Schema::hasTable('vpn_peer_traffic_daily')) {
+            foreach ($subscriptions as $sub) {
+                $sub->traffic_total_bytes = null;
+            }
+            return $subscriptions;
+        }
+
+        $items = $subscriptions->filter(fn ($sub) => $sub instanceof self)->values();
+        if ($items->isEmpty()) {
+            return $subscriptions;
+        }
+
+        $userIds = [];
+        $peerNames = [];
+        $serverIds = [];
+        $meta = [];
+
+        foreach ($items as $sub) {
+            $userId = (int) ($sub->user_id ?? 0);
+            $peerName = VpnPeerName::fromSubscription($sub);
+            $serverId = self::extractServerIdFromFilePath((string) ($sub->file_path ?? ''));
+
+            if ($userId > 0) {
+                $userIds[$userId] = $userId;
+            }
+            if (!empty($peerName)) {
+                $peerNames[$peerName] = $peerName;
+            }
+            if ($serverId !== null) {
+                $serverIds[$serverId] = $serverId;
+            }
+
+            $meta[(int) $sub->id] = [
+                'user_id' => $userId,
+                'peer_name' => $peerName,
+                'server_id' => $serverId,
+            ];
+        }
+
+        if (empty($userIds) || empty($peerNames)) {
+            foreach ($subscriptions as $sub) {
+                $sub->traffic_total_bytes = null;
+            }
+            return $subscriptions;
+        }
+
+        $trafficByUserServerPeer = VpnPeerTrafficDaily::query()
+            ->select('user_id', 'server_id', 'peer_name', DB::raw('SUM(total_bytes_delta) as total_bytes'))
+            ->whereIn('user_id', array_values($userIds))
+            ->whereIn('peer_name', array_values($peerNames))
+            ->when(!empty($serverIds), function ($query) use ($serverIds) {
+                $query->whereIn('server_id', array_values($serverIds));
+            })
+            ->groupBy('user_id', 'server_id', 'peer_name')
+            ->get()
+            ->keyBy(function ($row) {
+                return (int) $row->user_id . ':' . (int) $row->server_id . ':' . (string) $row->peer_name;
+            });
+
+        $trafficByUserPeer = VpnPeerTrafficDaily::query()
+            ->select('user_id', 'peer_name', DB::raw('SUM(total_bytes_delta) as total_bytes'))
+            ->whereIn('user_id', array_values($userIds))
+            ->whereIn('peer_name', array_values($peerNames))
+            ->groupBy('user_id', 'peer_name')
+            ->get()
+            ->keyBy(function ($row) {
+                return (int) $row->user_id . ':' . (string) $row->peer_name;
+            });
+
+        foreach ($subscriptions as $sub) {
+            $subId = (int) ($sub->id ?? 0);
+            $info = $meta[$subId] ?? null;
+            if (!$info || empty($info['peer_name']) || empty($info['user_id'])) {
+                $sub->traffic_total_bytes = null;
+                continue;
+            }
+
+            $bytes = null;
+            if (!empty($info['server_id'])) {
+                $key = $info['user_id'] . ':' . $info['server_id'] . ':' . $info['peer_name'];
+                $bytes = $trafficByUserServerPeer->get($key)?->total_bytes;
+            } else {
+                $key = $info['user_id'] . ':' . $info['peer_name'];
+                $bytes = $trafficByUserPeer->get($key)?->total_bytes;
+            }
+
+            $sub->traffic_total_bytes = $bytes !== null ? (int) $bytes : 0;
+        }
+
+        return $subscriptions;
+    }
+
+    public static function nextMonthlyEndDate(?string $previousEndDate): string
+    {
+        $fallbackBase = Carbon::today()->startOfDay();
+        $fallback = self::shiftMonthlyWithAnchor($fallbackBase);
+
+        if (empty($previousEndDate) || $previousEndDate === self::AWAIT_PAYMENT_DATE) {
+            return $fallback;
+        }
+
+        try {
+            $base = Carbon::parse($previousEndDate)->startOfDay();
+            return self::shiftMonthlyWithAnchor($base);
+        } catch (\Throwable) {
+            return $fallback;
+        }
+    }
+
+    public function isLocallyActive(): bool
+    {
+        if (!(bool) $this->is_processed) {
+            return false;
+        }
+
+        if (($this->end_date ?? null) === self::AWAIT_PAYMENT_DATE) {
+            return false;
+        }
+
+        if (($this->action ?? null) === 'deactivate') {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static function shiftMonthlyWithAnchor(Carbon $base): string
+    {
+        // Anchor monthly billing to end-of-month when base date is the month end.
+        if ($base->isLastOfMonth()) {
+            return $base->copy()->addMonthNoOverflow()->endOfMonth()->toDateString();
+        }
+
+        return $base->copy()->addMonthNoOverflow()->toDateString();
+    }
+
+    private static function extractServerIdFromFilePath(?string $filePath): ?int
+    {
+        if (!is_string($filePath) || trim($filePath) === '') {
+            return null;
+        }
+
+        $base = pathinfo(basename($filePath), PATHINFO_FILENAME);
+        if ($base === '') {
+            return null;
+        }
+
+        $parts = explode('_', $base);
+        if (count($parts) < 3) {
+            return null;
+        }
+
+        $serverId = (int) $parts[2];
+        return $serverId > 0 ? $serverId : null;
+    }
+
+    public function subscription(): BelongsTo
+    {
+        return $this->belongsTo(Subscription::class, 'subscription_id');
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+}
+

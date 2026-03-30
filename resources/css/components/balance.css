@@ -1,0 +1,13 @@
+.balance {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Mobile: stack balance + actions vertically to avoid cramped left column. */
+@media (max-width: 768px) {
+  .balance {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+}

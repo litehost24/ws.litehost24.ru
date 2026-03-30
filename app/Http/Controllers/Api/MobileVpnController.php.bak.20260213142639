@@ -1,0 +1,115 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Models\Server;
+use App\Models\UserSubscription;
+use App\Services\VpnAgent\VpnAgentClient;
+use App\Support\VpnPeerName;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+
+class MobileVpnController extends Controller
+{
+    public function list(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        $latestIds = UserSubscription::query()
+            ->select(DB::raw('MAX(id) as id'))
+            ->where('user_id', (int) $user->id)
+            ->groupBy('subscription_id');
+
+        $rows = UserSubscription::query()
+            ->whereIn('id', $latestIds)
+            ->with('subscription:id,name')
+            ->orderByDesc('id')
+            ->get();
+
+        $vpnRows = $rows->filter(fn ($r) => ($r->subscription?->name ?? null) === 'VPN')->values();
+
+        return response()->json([
+            'items' => $vpnRows->map(function ($r) {
+                return [
+                    'subscription_id' => (int) $r->subscription_id,
+                    'user_subscription_id' => (int) $r->id,
+                    'note' => (string) ($r->note ?? ''),
+                    'end_date' => $r->end_date ? (string) $r->end_date : null,
+                    'is_rebilling' => (bool) $r->is_rebilling,
+                    'is_processed' => (bool) $r->is_processed,
+                    'peer_name' => VpnPeerName::fromSubscription($r, null),
+                ];
+            })->values(),
+        ], 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
+    }
+
+    public function amneziawgConfig(Request $request, int $subscriptionId)
+    {
+        $userId = (int) Auth::id();
+        if (!$userId) {
+            return response()->json(['message' => 'Unauthenticated'], 401, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        $userSub = UserSubscription::query()
+            ->where('user_id', $userId)
+            ->where('subscription_id', $subscriptionId)
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$userSub) {
+            return response()->json(['message' => 'Подписка не найдена'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        $serverId = null;
+        if (!empty($userSub->file_path)) {
+            $base = pathinfo(basename((string) $userSub->file_path), PATHINFO_FILENAME);
+            $parts = explode('_', $base);
+            if (count($parts) >= 3 && trim((string) $parts[2]) !== '') {
+                $serverId = (int) $parts[2];
+            }
+        }
+        $serverId = $serverId ?: (int) $request->query('server_id', 0);
+        if (!$serverId) {
+            return response()->json(['message' => 'Не удалось определить server_id для конфига'], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        $peerName = VpnPeerName::fromSubscription($userSub, $serverId);
+        if (!$peerName) {
+            return response()->json(['message' => 'Не удалось определить peer_name для конфига'], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        $server = Server::query()
+            ->where('id', $serverId)
+            ->where('node1_api_enabled', true)
+            ->first();
+        if (!$server) {
+            return response()->json(['message' => 'Сервер не найден или node1 API выключен'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        try {
+            $client = new VpnAgentClient($server);
+            $config = $client->exportName($peerName);
+        } catch (\Throwable $e) {
+            \Log::error('Mobile config export error: ' . $e->getMessage(), [
+                'user_id' => $userId,
+                'subscription_id' => $subscriptionId,
+                'server_id' => $serverId,
+                'peer_name' => $peerName,
+            ]);
+            return response()->json(['message' => 'Ошибка получения конфига'], 500, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        $filename = 'peer-1.conf';
+        return response($config, 200, [
+            'Content-Type' => 'text/plain; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+}
+

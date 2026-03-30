@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * @property string $key
+ * @property string $value
+ */
+class ProjectSetting extends Model
+{
+    protected $fillable = [
+        'key',
+        'value',
+        'updated_by',
+    ];
+
+    public static function getValue(string $key, ?string $default = null): ?string
+    {
+        if (!Schema::hasTable('project_settings')) {
+            return $default;
+        }
+
+        $row = static::query()->where('key', $key)->first();
+        if (!$row) {
+            return $default;
+        }
+        return (string) $row->value;
+    }
+
+    public static function getInt(string $key, int $default = 0): int
+    {
+        $val = static::getValue($key, null);
+        if ($val === null) {
+            return $default;
+        }
+        if (!is_numeric($val)) {
+            return $default;
+        }
+        return (int) $val;
+    }
+
+    public static function setValue(string $key, string $value, ?int $updatedBy = null): void
+    {
+        static::query()->updateOrCreate(
+            ['key' => $key],
+            ['value' => $value, 'updated_by' => $updatedBy]
+        );
+    }
+}

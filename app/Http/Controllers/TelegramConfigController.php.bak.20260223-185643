@@ -1,0 +1,68 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\UserSubscription;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+use ZipArchive;
+
+class TelegramConfigController extends Controller
+{
+    public function showAmneziaWg(Request $request): View
+    {
+        $data = $request->validate([
+            'user_subscription_id' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $userSub = UserSubscription::query()->findOrFail((int) $data['user_subscription_id']);
+        $config = $this->extractWireguardConfigFromZipRelativePath((string) ($userSub->file_path ?? ''));
+        if ($config === null || trim($config) === '') {
+            abort(404);
+        }
+
+        return view('telegram.awg-config', [
+            'configText' => $config,
+            'filename' => 'peer-1.conf',
+        ]);
+    }
+
+    private function extractWireguardConfigFromZipRelativePath(string $filePath): ?string
+    {
+        $rel = trim($filePath);
+        if ($rel === '' || str_contains($rel, '..')) {
+            return null;
+        }
+
+        $zipPath = storage_path('app/public/' . ltrim($rel, '/'));
+        if (!is_file($zipPath)) {
+            return null;
+        }
+
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath) !== true) {
+            return null;
+        }
+
+        try {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $entryName = $zip->getNameIndex($i);
+                if (!$entryName || basename($entryName) !== 'peer-1.conf') {
+                    continue;
+                }
+
+                $content = $zip->getFromIndex($i);
+                if (is_string($content) && trim($content) !== '') {
+                    return $content;
+                }
+
+                return null;
+            }
+        } finally {
+            $zip->close();
+        }
+
+        return null;
+    }
+}
+

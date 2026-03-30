@@ -1,0 +1,29 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class VpnPeerTrafficSnapshot extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'server_id',
+        'user_id',
+        'peer_name',
+        'public_key',
+        'ip',
+        'rx_bytes',
+        'tx_bytes',
+        'captured_at',
+    ];
+
+    protected $casts = [
+        'rx_bytes' => 'integer',
+        'tx_bytes' => 'integer',
+        'captured_at' => 'datetime',
+    ];
+}
+

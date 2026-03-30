@@ -1,0 +1,38 @@
+<x-app-layout>
+    <div class="py-12">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
+                <div class="max-w-7xl mx-auto p-6 lg:p-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+                        @foreach($list as $item)
+                            <div class="scale-100 p-6 bg-white from-gray-700/50 via-transparent rounded-lg shadow-2xl shadow-gray-500/20 flex transition-all duration-250">
+                                <div>
+                                    <div class="h-16 w-16 bg-indigo-50 flex items-center justify-center rounded-full">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"
+                                             viewBox="0 0 24 24" fill="none" stroke="#0055ff" stroke-width="1.25"
+                                             stroke-linecap="round" stroke-linejoin="round"
+                                        >
+                                            <path
+                                                d="M20 6v12a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2z"/>
+                                            <path d="M10 16h6"/>
+                                            <path d="M13 11m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+                                            <path d="M4 8h3"/>
+                                            <path d="M4 12h3"/>
+                                            <path d="M4 16h3"/>
+                                        </svg>
+                                    </div>
+
+                                    <h2 class="mt-6 text-xl font-semibold text-gray-900">{{ $item['title'] }}</h2>
+
+                                    <p class="mt-4 text-gray-500 text-sm leading-relaxed">
+                                        {!! $item['description'] !!}
+                                    </p>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</x-app-layout>

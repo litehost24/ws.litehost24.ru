@@ -1,0 +1,39 @@
+.text-orange {
+  color: #e76b00;
+}
+
+/* Brand tokens (logo blue). Keep Bootstrap + custom UI in sync. */
+:root {
+  --lh-brand-blue: #3088f0;
+  --lh-brand-blue-hover: #2a7be0;
+  --lh-brand-blue-active: #256fd0;
+
+  /* Bootstrap theme overrides */
+  --bs-primary: var(--lh-brand-blue);
+  --bs-primary-rgb: 48, 136, 240;
+  --bs-link-color: var(--lh-brand-blue);
+  --bs-link-hover-color: var(--lh-brand-blue-hover);
+}
+
+/* Brand: align Bootstrap primary buttons with logo blue. */
+.btn-primary {
+  --bs-btn-bg: var(--lh-brand-blue);
+  --bs-btn-border-color: var(--lh-brand-blue);
+  --bs-btn-hover-bg: var(--lh-brand-blue-hover);
+  --bs-btn-hover-border-color: var(--lh-brand-blue-hover);
+  --bs-btn-focus-shadow-rgb: 48, 136, 240;
+  --bs-btn-active-bg: var(--lh-brand-blue-active);
+  --bs-btn-active-border-color: var(--lh-brand-blue-active);
+  --bs-btn-disabled-bg: var(--lh-brand-blue);
+  --bs-btn-disabled-border-color: var(--lh-brand-blue);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--lh-brand-blue);
+  --bs-btn-border-color: var(--lh-brand-blue);
+  --bs-btn-hover-bg: var(--lh-brand-blue);
+  --bs-btn-hover-border-color: var(--lh-brand-blue);
+  --bs-btn-focus-shadow-rgb: 48, 136, 240;
+  --bs-btn-active-bg: var(--lh-brand-blue-active);
+  --bs-btn-active-border-color: var(--lh-brand-blue-active);
+}

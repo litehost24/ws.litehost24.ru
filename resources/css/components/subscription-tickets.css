@@ -1,0 +1,72 @@
+.subscription-tickets {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 30px;
+}
+
+.subscription-tickets__col {
+  border-radius: .375rem;
+  padding: 1.5rem 1.5rem;
+}
+
+.subscription-tickets__col__main-header {
+  margin-bottom: 15px;
+  font-size: 18px;
+}
+
+.subscription-tickets hr {
+  margin: 15px 0;
+}
+
+.subscription-tickets__col__header, .subscription-tickets__row {
+  display: grid;
+  grid-template-columns: 1fr 2fr 2fr 1fr 1.5fr 1fr;
+  align-items: center;
+}
+
+.subscription-tickets__col__header.--create, .subscription-tickets__row.--create {
+  grid-template-columns: 1fr 2fr 1fr 1fr 1.5fr 2fr;
+}
+
+.subscription-tickets__col__header {
+  padding: 0 15px 5px;
+  margin-bottom: 10px;
+  font-weight: 500;
+  border-bottom: 1px solid #c7c8c9;
+}
+
+.subscription-tickets__col__action {
+  text-align: center;
+}
+
+.subscription-tickets__row {
+  padding: 5px 15px;
+}
+
+.subscription-tickets__row:nth-child(odd) {
+  background-color: #f5f5f5;
+}
+
+.subscription-tickets__row:hover {
+  background-color: #7aff0045;
+}
+
+.subscription-tickets__action-cell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.subscription-tickets__action-cell form {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.subscription-tickets__row__btn-done {
+  padding: 5px;
+  background-color: #71e5af;
+  border-radius: 5px;
+  width: 100%;
+}

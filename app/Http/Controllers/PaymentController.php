@@ -1,0 +1,115 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Payment;
+use Exception;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Foundation\Validation\ValidatesRequests;
+use Illuminate\Routing\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
+use Log;
+use Moneta\MonetaSdk;
+
+class PaymentController extends Controller
+{
+    use AuthorizesRequests, ValidatesRequests;
+
+    public function initGet(): RedirectResponse
+    {
+        return redirect()->route('my.main');
+    }
+
+    public function init(Request $request)
+    {
+        $orderId = Auth::id() . '_' . time();
+        $sum = $request->get("sum");
+        $description = 'Оплата заказа: ' . $orderId;
+
+        $mSdk = new MonetaSdk($orderId, $sum, $description, $this->getPathConfig());
+        return redirect($mSdk->getAssistantPaymentLink());
+    }
+
+    public function hookSuccess(Request $request): string
+    {
+        try {
+            $p = $request->all();
+
+            // Avoid logging full payload (may include sensitive/irrelevant fields).
+            Log::debug('Payment hook received', [
+                'transaction_id' => $p['MNT_TRANSACTION_ID'] ?? null,
+                'operation_id' => $p['MNT_OPERATION_ID'] ?? null,
+                'amount' => $p['MNT_AMOUNT'] ?? null,
+                'currency' => $p['MNT_CURRENCY_CODE'] ?? null,
+                'test_mode' => $p['MNT_TEST_MODE'] ?? null,
+                'ip' => $request->ip(),
+            ]);
+
+            $required = [
+                'MNT_ID',
+                'MNT_TRANSACTION_ID',
+                'MNT_OPERATION_ID',
+                'MNT_AMOUNT',
+                'MNT_CURRENCY_CODE',
+                'MNT_TEST_MODE',
+                'MNT_SIGNATURE',
+            ];
+
+            foreach ($required as $k) {
+                if (!array_key_exists($k, $p)) {
+                    Log::warning('Payment hook missing required field', [
+                        'missing' => $k,
+                        'transaction_id' => $p['MNT_TRANSACTION_ID'] ?? null,
+                        'operation_id' => $p['MNT_OPERATION_ID'] ?? null,
+                        'ip' => $request->ip(),
+                    ]);
+                    return 'ERROR: missing required field';
+                }
+            }
+
+            $signature = md5(
+                $p['MNT_ID'] .
+                $p['MNT_TRANSACTION_ID'] .
+                $p['MNT_OPERATION_ID'] .
+                $p['MNT_AMOUNT'] .
+                $p['MNT_CURRENCY_CODE'] .
+                $p['MNT_TEST_MODE'] .
+                config('moneta.account.secret')
+            );
+
+            if (!hash_equals($signature, (string) $p['MNT_SIGNATURE'])) {
+                $provided = (string) $p['MNT_SIGNATURE'];
+                Log::warning('Payment hook signature mismatch', [
+                    'transaction_id' => $p['MNT_TRANSACTION_ID'],
+                    'operation_id' => $p['MNT_OPERATION_ID'],
+                    'provided_signature' => strlen($provided) > 12 ? substr($provided, 0, 12) . '...' : $provided,
+                    'ip' => $request->ip(),
+                ]);
+                return 'ERROR: signature not valid';
+            }
+
+            $userId = explode('_', $p['MNT_TRANSACTION_ID'])[0];
+
+            Payment::create([
+                'user_id' => $userId,
+                'amount' => $p['MNT_AMOUNT'] * 100,
+                'order_name' => $p['MNT_OPERATION_ID'],
+                'type' => 'topup',
+            ]);
+
+            return 'SUCCESS';
+        } catch (Exception $e) {
+            Log::error("Payment hook error: " . $e->getMessage());
+            return 'ERROR: exception occurred';
+        }
+    }
+
+
+    private function getPathConfig(): string
+    {
+        return base_path() . '/config/moneta';
+    }
+
+}

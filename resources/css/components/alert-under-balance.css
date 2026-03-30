@@ -1,0 +1,13 @@
+.alert-under-balance {
+  padding: 5px 2rem;
+  background-color: #71e5af;
+  color: #2e2e2e;
+}
+
+.alert-under-balance.--success {
+  background-color: #71e5af;
+}
+
+.alert-under-balance.--error {
+  background-color: #f87171;
+}

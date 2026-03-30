@@ -1,0 +1,854 @@
+﻿<x-app-layout>
+    <x-slot name="header">
+        <h2 class="font-semibold text-lg text-gray-800 leading-tight">
+            {{ __('Администрирование подписок') }}
+        </h2>
+    </x-slot>
+
+    <div class="py-4" style="margin-bottom:-16px;">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
+                <div class="p-4 bg-white border-b border-gray-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-lg font-medium">Все подписки пользователей</h3>
+
+                        <div class="flex space-x-2">
+                            <a href="{{ route('admin.subscriptions.index', ['status' => 'all']) }}"
+                               class="px-4 py-2 text-sm font-medium rounded-md {{ $statusFilter !== 'active' && $statusFilter !== 'inactive' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700' }}">
+                                Все
+                            </a>
+                            <a href="{{ route('admin.subscriptions.index', ['status' => 'active']) }}"
+                               class="px-4 py-2 text-sm font-medium rounded-md {{ $statusFilter === 'active' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700' }}">
+                                Активные
+                            </a>
+                            <a href="{{ route('admin.subscriptions.index', ['status' => 'inactive']) }}"
+                               class="px-4 py-2 text-sm font-medium rounded-md {{ $statusFilter === 'inactive' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700' }}">
+                                Неактивные
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="mb-2 flex flex-wrap items-center gap-3">
+                        <form method="POST" action="{{ route('admin.subscriptions.migrate') }}" class="flex flex-wrap items-center gap-3">
+                            @csrf
+                            <label class="text-sm text-gray-600">Обновить подписки</label>
+                            <select name="server_id" class="rounded-md border border-gray-300 p-1 text-sm" {{ ($migration && $migration->status === 'running') ? 'disabled' : '' }}>
+                                @foreach($servers as $server)
+                                    <option value="{{ $server->id }}" {{ (int)($migration?->server_id ?? $selectedServerId) === (int)$server->id ? 'selected' : '' }}>
+                                        Сервер #{{ $server->id }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <input type="number" name="batch_size" min="1" max="1000" class="w-24 rounded-md border border-gray-300 p-1 text-sm" value="{{ $migration?->batch_size ?? 100 }}" {{ ($migration && $migration->status === 'running') ? 'disabled' : '' }}>
+                            <button type="submit"
+                                    class="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 {{ ($migration && $migration->status === 'running') ? 'opacity-50 cursor-not-allowed' : '' }}"
+                                    {{ ($migration && $migration->status === 'running') ? 'disabled' : '' }}>
+                                Запустить
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ route('admin.subscriptions.migrate') }}" class="flex flex-wrap items-center gap-3">
+                            @csrf
+                            <input type="hidden" name="server_id" value="{{ $migration?->server_id ?? $selectedServerId }}">
+                            <input type="hidden" name="batch_size" value="{{ $migration?->batch_size ?? 100 }}">
+                            <input type="hidden" name="resume" value="1">
+                            <button type="submit" class="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50" {{ ($migration && $migration->status === 'running') ? '' : 'disabled' }}>
+                                Продолжить
+                            </button>
+                        </form>
+                        <form method="GET" action="{{ route('admin.subscriptions.stop') }}" class="flex flex-wrap items-center gap-3">
+                            <button type="submit"
+                                    class="inline-flex items-center rounded-md border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50 {{ ($migration && $migration->status === 'running') ? '' : 'opacity-50 cursor-not-allowed' }}"
+                                    {{ ($migration && $migration->status === 'running') ? '' : 'disabled' }}>
+                                Стоп
+                            </button>
+                        </form>
+                        @if($migration)
+                            <div class="text-xs text-gray-500" id="migration-status">
+                                Статус: <span id="migration-status-text">{{ $migration->status }}</span> · Обработано: <span id="migration-processed">{{ $migration->processed_count }}</span> · Ошибки: <span id="migration-errors">{{ $migration->error_count }}</span>
+                            </div>
+                            @if($migrationErrors && $migrationErrors->count() > 0)
+                                <div class="text-xs text-red-600" id="migration-errors-text">Последние ошибки: {{ $migrationErrors->count() }}</div>
+                            @else
+                                <div class="text-xs text-red-600 hidden" id="migration-errors-text"></div>
+                            @endif
+                        @else
+                            <div class="text-xs text-gray-500 hidden" id="migration-status"></div>
+                            <div class="text-xs text-red-600 hidden" id="migration-errors-text"></div>
+                        @endif
+                        @if($latestServerId)
+                            <div class="text-xs text-gray-500" id="migration-server">
+                                Текущий сервер: #<span id="migration-server-id">{{ $migration?->server_id ?? $selectedServerId }}</span>
+                            </div>
+                        @else
+                            <div class="text-xs text-gray-500 hidden" id="migration-server"></div>
+                        @endif
+                    </div>
+
+                    <div class="admin-subs-scroll overflow-x-auto">
+                        @php
+                            $currentServerId = $migration?->server_id ?? $selectedServerId ?? $latestServerId;
+                        @endphp
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        <a href="{{ route('admin.subscriptions.index', array_merge(request()->query(), ['sort_by' => 'user_id', 'sort_order' => $sortBy === 'user_id' && $sortOrder === 'asc' ? 'desc' : 'asc'])) }}" class="hover:text-gray-700">
+                                            ID
+                                            @if($sortBy === 'user_id')
+                                                @if($sortOrder === 'asc')
+                                                    <span>↑</span>
+                                                @else
+                                                    <span>↓</span>
+                                                @endif
+                                            @endif
+                                        </a>
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        <a href="{{ route('admin.subscriptions.index', array_merge(request()->query(), ['sort_by' => 'user.name', 'sort_order' => $sortBy === 'user.name' && $sortOrder === 'asc' ? 'desc' : 'asc'])) }}" class="hover:text-gray-700">
+                                            Имя
+                                            @if($sortBy === 'user.name')
+                                                @if($sortOrder === 'asc')
+                                                    <span>↑</span>
+                                                @else
+                                                    <span>↓</span>
+                                                @endif
+                                            @endif
+                                        </a>
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        <a href="{{ route('admin.subscriptions.index', array_merge(request()->query(), ['sort_by' => 'balance', 'sort_order' => $sortBy === 'balance' && $sortOrder === 'asc' ? 'desc' : 'asc'])) }}" class="hover:text-gray-700">
+                                            Баланс
+                                            @if($sortBy === 'balance')
+                                                @if($sortOrder === 'asc')
+                                                    <span>↑</span>
+                                                @else
+                                                    <span>↓</span>
+                                                @endif
+                                            @endif
+                                        </a>
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        <a href="{{ route('admin.subscriptions.index', array_merge(request()->query(), ['sort_by' => 'subscription_id', 'sort_order' => $sortBy === 'subscription_id' && $sortOrder === 'asc' ? 'desc' : 'asc'])) }}" class="hover:text-gray-700">
+                                            ID подп.
+                                            @if($sortBy === 'subscription_id')
+                                                @if($sortOrder === 'asc')
+                                                    <span>↑</span>
+                                                @else
+                                                    <span>↓</span>
+                                                @endif
+                                            @endif
+                                        </a>
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        Подписка
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        <a href="{{ route('admin.subscriptions.index', array_merge(request()->query(), ['sort_by' => 'price', 'sort_order' => $sortBy === 'price' && $sortOrder === 'asc' ? 'desc' : 'asc'])) }}" class="hover:text-gray-700">
+                                            Цена
+                                            @if($sortBy === 'price')
+                                                @if($sortOrder === 'asc')
+                                                    <span>↑</span>
+                                                @else
+                                                    <span>↓</span>
+                                                @endif
+                                            @endif
+                                        </a>
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        <a href="{{ route('admin.subscriptions.index', array_merge(request()->query(), ['sort_by' => 'end_date', 'sort_order' => $sortBy === 'end_date' && $sortOrder === 'asc' ? 'desc' : 'asc'])) }}" class="hover:text-gray-700">
+                                            Окончание
+                                            @if($sortBy === 'end_date')
+                                                @if($sortOrder === 'asc')
+                                                    <span>↑</span>
+                                                @else
+                                                    <span>↓</span>
+                                                @endif
+                                            @endif
+                                        </a>
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider" title="Автопродление">
+                                        <a href="{{ route('admin.subscriptions.index', array_merge(request()->query(), ['sort_by' => 'is_rebilling', 'sort_order' => $sortBy === 'is_rebilling' && $sortOrder === 'asc' ? 'desc' : 'asc'])) }}" class="hover:text-gray-700">
+                                            ↻
+                                            @if($sortBy === 'is_rebilling')
+                                                @if($sortOrder === 'asc')
+                                                    <span>↑</span>
+                                                @else
+                                                    <span>↓</span>
+                                                @endif
+                                            @endif
+                                        </a>
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        Конфиг
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider" title="Обновлено на текущий сервер">
+                                        Обн.
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        Локально
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        На сервере
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        Итог
+                                    </th>
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                                        Ошибка
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                @php
+                                    $grouped = $userSubscriptions->groupBy('user_id');
+                                @endphp
+                                @foreach($grouped as $userId => $group)
+                                        @php
+                                            $first = $group->first();
+                                            $rest = $group->slice(1);
+                                            $hasInactiveInRest = $rest->contains(function ($sub) {
+                                                return !$sub->is_active;
+                                            });
+                                            $refUser = $first->user?->referrer;
+                                            $refLabel = $refUser
+                                                ? ('Реферал от: ' . ($refUser->name ?? 'N/A') . ' (#' . $refUser->id . ')')
+                                                : 'Без реферала';
+                                        @endphp
+                                    <tr class="{{ $loop->odd ? 'bg-gray-100' : '' }}">
+                                        <td class="px-2 py-2 whitespace-nowrap">{{ $first->user_id }}</td>
+                                        <td class="px-2 py-2 whitespace-nowrap">
+                                            <button
+                                                type="button"
+                                                class="admin-subs-tooltip admin-subs-user-link text-left underline-offset-2 hover:underline"
+                                                data-tooltip="{{ $refLabel }}"
+                                                data-user-id="{{ $first->user_id }}"
+                                            >
+                                                {{ $first->user->name ?? 'N/A' }}
+                                            </button>
+                                        </td>
+                                        <td class="px-2 py-2 whitespace-nowrap">{{ $first->balance / 100 }} руб.</td>
+                                        <td class="px-2 py-2 whitespace-nowrap">{{ $first->subscription_id }}</td>
+                                        <td class="px-2 py-2 whitespace-nowrap">
+                                            {{ $first->subscription->name ?? 'N/A' }}
+                                            @if($rest->count() > 0)
+                                                <span class="inline-flex items-center ms-2 gap-1">
+                                                    <button type="button" class="subs-toggle inline-flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs font-semibold text-gray-700" data-target="subs-{{ $userId }}" title="ещё {{ $rest->count() }}">+</button>
+                                                    <span class="text-xs text-gray-600">{{ $group->count() }}</span>
+                                                </span>
+                                            @endif
+                                        </td>
+                                        <td class="px-2 py-2 whitespace-nowrap">{{ $first->price / 100 }}</td>
+                                        <td class="px-2 py-2 whitespace-nowrap">{{ \Carbon\Carbon::parse($first->end_date)->format('d.m.Y') }}</td>
+                                        <td class="px-2 py-2 whitespace-nowrap">
+                                            @if($first->is_rebilling)
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">✓</span>
+                                            @else
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-2 py-2 whitespace-nowrap">
+                                                @if($first->file_path)
+                                                    @php
+                                                        $fileBase = pathinfo(basename($first->file_path), PATHINFO_FILENAME);
+                                                        $parts = explode('_', $fileBase);
+                                                        $displayValue = count($parts) >= 3 ? $parts[1].'_'.$parts[2] : $fileBase;
+                                                    @endphp
+                                                    {{ $displayValue }}
+                                                @else
+                                                    -
+                                                @endif
+                                        </td>
+                                        <td class="px-2 py-2 whitespace-nowrap">
+                                            @php
+                                                $serverIdFromFile = null;
+                                                if (!empty($first->file_path)) {
+                                                    $nameParts = explode('_', pathinfo(basename($first->file_path), PATHINFO_FILENAME));
+                                                    if (count($nameParts) >= 3) {
+                                                        $serverIdFromFile = $nameParts[2];
+                                                    }
+                                                }
+                                            @endphp
+                                            @if($currentServerId && $serverIdFromFile == $currentServerId)
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">✓</span>
+                                            @else
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-2 py-2 whitespace-nowrap">
+                                            @if($first->is_active)
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $hasInactiveInRest ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800' }}">Активна</span>
+                                            @else
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Неактивна</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-2 py-2 whitespace-nowrap">
+                                            @if($first->server_status === 'enabled')
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Включена</span>
+                                            @elseif($first->server_status === 'disabled')
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Отключена</span>
+                                            @elseif($first->server_status === 'missing')
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Не найдена</span>
+                                            @else
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-700">Неизвестно</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-2 py-2 whitespace-nowrap">
+                                            @if($first->effective_status === 'working')
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Работает</span>
+                                            @elseif($first->effective_status === 'stopped')
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Остановлена</span>
+                                            @else
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-700">Неизвестно</span>
+                                            @endif
+                                            @if($first->has_server_status_conflict)
+                                                <span class="ms-1 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Конфликт</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-2 py-2 whitespace-nowrap">
+                                            {{ $first->action_error ?: '-' }}
+                                        </td>
+                                    </tr>
+                                    @foreach($rest as $sub)
+                                        <tr class="subs-extra hidden {{ $loop->odd ? 'bg-gray-100' : '' }}" data-parent="subs-{{ $userId }}">
+                                            <td class="px-2 py-2 whitespace-nowrap"></td>
+                                            <td class="px-2 py-2 whitespace-nowrap"></td>
+                                            <td class="px-2 py-2 whitespace-nowrap"></td>
+                                            <td class="px-2 py-2 whitespace-nowrap">{{ $sub->subscription_id }}</td>
+                                            <td class="px-2 py-2 whitespace-nowrap">{{ $sub->subscription->name ?? 'N/A' }}</td>
+                                            <td class="px-2 py-2 whitespace-nowrap">{{ $sub->price / 100 }}</td>
+                                            <td class="px-2 py-2 whitespace-nowrap">{{ \Carbon\Carbon::parse($sub->end_date)->format('d.m.Y') }}</td>
+                                            <td class="px-2 py-2 whitespace-nowrap">
+                                                @if($sub->is_rebilling)
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">✓</span>
+                                                @else
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">—</span>
+                                                @endif
+                                            </td>
+                                            <td class="px-2 py-2 whitespace-nowrap">
+                                                @if($sub->file_path)
+                                                    @php
+                                                        $fileBase = pathinfo(basename($sub->file_path), PATHINFO_FILENAME);
+                                                        $parts = explode('_', $fileBase);
+                                                        $displayValue = count($parts) >= 3 ? $parts[1].'_'.$parts[2] : $fileBase;
+                                                    @endphp
+                                                    {{ $displayValue }}
+                                                @else
+                                                    -
+                                                @endif
+                                            </td>
+                                            <td class="px-2 py-2 whitespace-nowrap">
+                                                @php
+                                                    $serverIdFromFile = null;
+                                                    if (!empty($sub->file_path)) {
+                                                        $nameParts = explode('_', pathinfo(basename($sub->file_path), PATHINFO_FILENAME));
+                                                        if (count($nameParts) >= 3) {
+                                                            $serverIdFromFile = $nameParts[2];
+                                                        }
+                                                    }
+                                                @endphp
+                                                @if($currentServerId && $serverIdFromFile == $currentServerId)
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">✓</span>
+                                                @else
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">—</span>
+                                                @endif
+                                            </td>
+                                            <td class="px-2 py-2 whitespace-nowrap">
+                                                @if($sub->is_active)
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Активна</span>
+                                                @else
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Неактивна</span>
+                                                @endif
+                                            </td>
+                                            <td class="px-2 py-2 whitespace-nowrap">
+                                                @if($sub->server_status === 'enabled')
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Включена</span>
+                                                @elseif($sub->server_status === 'disabled')
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Отключена</span>
+                                                @elseif($sub->server_status === 'missing')
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Не найдена</span>
+                                                @else
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-700">Неизвестно</span>
+                                                @endif
+                                            </td>
+                                            <td class="px-2 py-2 whitespace-nowrap">
+                                                @if($sub->effective_status === 'working')
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Работает</span>
+                                                @elseif($sub->effective_status === 'stopped')
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Остановлена</span>
+                                                @else
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-700">Неизвестно</span>
+                                                @endif
+                                                @if($sub->has_server_status_conflict)
+                                                    <span class="ms-1 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Конфликт</span>
+                                                @endif
+                                            </td>
+                                            <td class="px-2 py-2 whitespace-nowrap">
+                                                {{ $sub->action_error ?: '-' }}
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                @endforeach
+                            </tbody>
+                            <tfoot class="bg-gray-50">
+                                <tr>
+                                    <td class="px-2 py-2 text-xs font-semibold text-gray-700 whitespace-nowrap" colspan="2">
+                                        Всего пользователей: {{ $totalUsers }}
+                                    </td>
+                                    <td class="px-2 py-2 text-xs font-semibold text-gray-700 whitespace-nowrap" colspan="2">
+                                        Активных: {{ $activeUsers }}
+                                    </td>
+                                    <td class="px-2 py-2 text-xs font-semibold text-gray-700 whitespace-nowrap" colspan="2">
+                                        Неактивных: {{ $inactiveUsers }}
+                                    </td>
+                                    <td class="px-2 py-2 text-xs font-semibold text-gray-700 whitespace-nowrap" colspan="2">
+                                        Активных подписок: {{ $activeSubscriptions }}
+                                    </td>
+                                    <td class="px-2 py-2 text-xs font-semibold text-gray-700 whitespace-nowrap" colspan="6">
+                                        Всего средств на счетах: {{ $totalBalance / 100 }} руб.
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                        @if(count($userSubscriptions) === 0)
+                            <div class="text-center py-8">
+                                <p class="text-gray-500">Нет данных о подписках пользователей</p>
+                            </div>
+                        @endif
+
+                        <div class="mt-6 border-t border-gray-200 pt-4">
+                            <h4 class="text-base font-medium text-gray-900 mb-3">Рассылка сообщений</h4>
+
+                            @if (session('banner-success'))
+                                <div class="mb-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-green-800">
+                                    {{ session('banner-success') }}
+                                </div>
+                            @endif
+                            @if (session('banner-error'))
+                                <div class="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-800">
+                                    {{ session('banner-error') }}
+                                </div>
+                            @endif
+                            <div id="banner-ajax-status" class="mb-3 hidden rounded-md px-3 py-2 text-sm"></div>
+
+                            <form method="POST" action="{{ route('admin.site-banner.update') }}" class="space-y-3 js-banner-form" data-success-text="Баннер обновлен.">
+                                @csrf
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Тема письма</label>
+                                    <input type="text" name="subject" class="mt-1 w-full rounded-md border border-gray-300 p-2 text-sm" placeholder="Информация от Litehost24" value="{{ old('subject', $siteBanner->subject ?? '') }}">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Текст сообщения</label>
+                                    <textarea name="message" rows="4" class="mt-1 w-full rounded-md border border-gray-300 p-2 text-sm" placeholder="Текст сообщения">{{ old('message', $siteBanner->message ?? '') }}</textarea>
+                                </div>
+                                <input type="hidden" name="is_active" value="0">
+                                <label class="inline-flex items-center text-sm text-gray-700">
+                                    <input type="checkbox" name="is_active" value="1" class="rounded border-gray-300" {{ (old('is_active', $siteBanner->is_active ?? true)) ? 'checked' : '' }}>
+                                    <span class="ms-2">Показывать баннер</span>
+                                </label>
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <button type="submit" class="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+                                        Сохранить
+                                    </button>
+                                    <a href="{{ route('admin.site-banner.preview') }}" target="_blank" class="inline-flex items-center rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                                        Предпросмотр письма
+                                    </a>
+                                </div>
+                            </form>
+                            <form method="POST" action="{{ route('admin.site-banner.send') }}" class="mt-3 js-banner-form" data-success-text="Рассылка отправлена активным подписчикам.">
+                                @csrf
+                                <button type="submit" class="inline-flex items-center rounded-md border border-indigo-600 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">
+                                    Разослать активным подписчикам
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ route('admin.site-banner.send-test') }}" class="mt-3 flex flex-wrap items-center gap-3 js-banner-form" data-success-text="Тестовое письмо отправлено.">
+                                @csrf
+                                <input type="email" name="test_email" class="w-full max-w-xs rounded-md border border-gray-300 p-2 text-sm" value="{{ old('test_email', Auth::user()->email) }}" placeholder="email для теста" required>
+                                <button type="submit" class="inline-flex items-center rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                                    Отправить тест
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="user-details-modal" class="fixed inset-0 z-[9999] hidden overflow-y-auto">
+        <div class="absolute inset-0 bg-black/50" data-close-user-details></div>
+        <div class="relative admin-user-details-dialog rounded-lg bg-white p-5 shadow-lg">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-900">Детали пользователя</h3>
+                <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-full text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700" data-close-user-details>×</button>
+            </div>
+
+            <div id="user-details-loading" class="mt-4 text-sm text-gray-500 hidden">Загрузка...</div>
+            <div id="user-details-error" class="mt-4 hidden rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"></div>
+
+            <div id="user-details-content" class="mt-4 hidden">
+                <div class="grid grid-cols-1 gap-2 text-sm text-gray-700 md:grid-cols-2">
+                    <div><span class="font-semibold">ID:</span> <span id="ud-user-id"></span></div>
+                    <div><span class="font-semibold">Имя:</span> <span id="ud-user-name"></span></div>
+                    <div><span class="font-semibold">Email:</span> <span id="ud-user-email"></span></div>
+                    <div><span class="font-semibold">Телефон:</span> <span id="ud-user-phone"></span></div>
+                    <div><span class="font-semibold">Роль:</span> <span id="ud-user-role"></span></div>
+                    <div><span class="font-semibold">Регистрация:</span> <span id="ud-user-registered"></span></div>
+                    <div class="md:col-span-2"><span class="font-semibold">Реферал:</span> <span id="ud-user-referrer"></span></div>
+                </div>
+
+                <div class="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+                    <div class="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                        <div class="text-xs uppercase text-gray-500">Всего пополнений</div>
+                        <div id="ud-summary-payments" class="text-base font-semibold text-gray-900"></div>
+                    </div>
+                    <div class="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                        <div class="text-xs uppercase text-gray-500">Всего списаний</div>
+                        <div id="ud-summary-charges" class="text-base font-semibold text-gray-900"></div>
+                    </div>
+                    <div class="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                        <div class="text-xs uppercase text-gray-500">Текущий баланс</div>
+                        <div id="ud-summary-balance" class="text-base font-semibold text-gray-900"></div>
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <h4 class="text-sm font-semibold text-gray-900">Платежи (успешные)</h4>
+                    <div class="mt-2 max-h-52 overflow-auto rounded-md border border-gray-200">
+                        <table class="min-w-full text-xs">
+                            <thead class="bg-gray-50 text-gray-600">
+                            <tr>
+                                <th class="px-2 py-2 text-left">Дата</th>
+                                <th class="px-2 py-2 text-left">Сумма</th>
+                                <th class="px-2 py-2 text-left">Order ID</th>
+                            </tr>
+                            </thead>
+                            <tbody id="ud-payments-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <h4 class="text-sm font-semibold text-gray-900">Списания и записи подписок</h4>
+                    <div class="mt-2 max-h-64 overflow-auto rounded-md border border-gray-200">
+                        <table class="min-w-full text-xs">
+                            <thead class="bg-gray-50 text-gray-600">
+                            <tr>
+                                <th class="px-2 py-2 text-left">Дата</th>
+                                <th class="px-2 py-2 text-left">Окончание</th>
+                                <th class="px-2 py-2 text-left">Подписка</th>
+                                <th class="px-2 py-2 text-left">Сумма</th>
+                                <th class="px-2 py-2 text-left">Действие</th>
+                                <th class="px-2 py-2 text-left">↻</th>
+                            </tr>
+                            </thead>
+                            <tbody id="ud-charges-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const statusEl = document.getElementById('migration-status');
+            const statusTextEl = document.getElementById('migration-status-text');
+            const processedEl = document.getElementById('migration-processed');
+            const errorsEl = document.getElementById('migration-errors');
+            const errorsTextEl = document.getElementById('migration-errors-text');
+            const serverEl = document.getElementById('migration-server');
+            const serverIdEl = document.getElementById('migration-server-id');
+
+            async function refreshStatus() {
+                try {
+                    const res = await fetch('{{ route('admin.subscriptions.status') }}', {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    if (!res.ok) return;
+                    const data = await res.json();
+
+                    if (data.migration) {
+                        if (statusEl) statusEl.classList.remove('hidden');
+                        if (statusTextEl) statusTextEl.textContent = data.migration.status;
+                        if (processedEl) processedEl.textContent = data.migration.processed_count;
+                        if (errorsEl) errorsEl.textContent = data.migration.error_count;
+
+                        if (errorsTextEl) {
+                            if (data.migration.error_count > 0) {
+                                errorsTextEl.textContent = 'Последние ошибки: ' + data.migration.error_count;
+                                errorsTextEl.classList.remove('hidden');
+                            } else {
+                                errorsTextEl.textContent = '';
+                                errorsTextEl.classList.add('hidden');
+                            }
+                        }
+                    }
+
+                    const serverId = (data.migration && data.migration.server_id) ? data.migration.server_id : data.latest_server_id;
+                    if (serverId && serverEl && serverIdEl) {
+                        serverEl.classList.remove('hidden');
+                        serverIdEl.textContent = serverId;
+                    }
+
+                    if (data.migration && data.migration.status === 'running') {
+                        setTimeout(refreshStatus, 3000);
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
+
+            if (statusEl && statusTextEl && statusTextEl.textContent === 'running') {
+                setTimeout(refreshStatus, 1500);
+            }
+        })();
+
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.subs-toggle');
+            if (!btn) return;
+            const target = btn.getAttribute('data-target');
+            const rows = document.querySelectorAll('tr.subs-extra[data-parent="' + target + '"]');
+            if (!rows.length) return;
+            const isHidden = rows[0].classList.contains('hidden');
+            rows.forEach(row => row.classList.toggle('hidden'));
+            btn.textContent = isHidden ? '−' : '+';
+        });
+
+        (function () {
+            const tooltip = document.createElement('div');
+            tooltip.style.position = 'fixed';
+            tooltip.style.zIndex = '9999';
+            tooltip.style.maxWidth = '320px';
+            tooltip.style.padding = '8px 10px';
+            tooltip.style.borderRadius = '8px';
+            tooltip.style.background = '#f3f4f6';
+            tooltip.style.color = '#111827';
+            tooltip.style.border = '1px solid #e5e7eb';
+            tooltip.style.fontSize = '12px';
+            tooltip.style.lineHeight = '1.3';
+            tooltip.style.boxShadow = '0 6px 18px rgba(0,0,0,.12)';
+            tooltip.style.pointerEvents = 'none';
+            tooltip.style.opacity = '0';
+            tooltip.style.transition = 'opacity .12s ease';
+            document.body.appendChild(tooltip);
+
+            function showTip(text, x, y) {
+                tooltip.textContent = text;
+                const offsetX = 12;
+                const offsetY = 12;
+                tooltip.style.left = (x + offsetX) + 'px';
+                tooltip.style.top = (y + offsetY) + 'px';
+                tooltip.style.opacity = '1';
+            }
+
+            function hideTip() {
+                tooltip.style.opacity = '0';
+            }
+
+            document.addEventListener('mousemove', function (e) {
+                const target = e.target.closest('.admin-subs-tooltip');
+                if (!target) return;
+                const text = target.getAttribute('data-tooltip') || '';
+                showTip(text, e.clientX, e.clientY);
+            });
+
+            document.addEventListener('mouseover', function (e) {
+                const target = e.target.closest('.admin-subs-tooltip');
+                if (!target) return;
+                const text = target.getAttribute('data-tooltip') || '';
+                showTip(text, e.clientX, e.clientY);
+            });
+
+            document.addEventListener('mouseout', function (e) {
+                if (e.target.closest('.admin-subs-tooltip')) {
+                    hideTip();
+                }
+            });
+        })();
+
+        (function () {
+            const statusEl = document.getElementById('banner-ajax-status');
+            const forms = document.querySelectorAll('.js-banner-form');
+
+            if (!forms.length || !statusEl) return;
+
+            function showStatus(message, type) {
+                statusEl.textContent = message || '';
+                statusEl.classList.remove('hidden', 'border', 'border-red-200', 'bg-red-50', 'text-red-800', 'border-green-200', 'bg-green-50', 'text-green-800');
+                if (type === 'error') {
+                    statusEl.classList.add('border', 'border-red-200', 'bg-red-50', 'text-red-800');
+                } else {
+                    statusEl.classList.add('border', 'border-green-200', 'bg-green-50', 'text-green-800');
+                }
+            }
+
+            forms.forEach(function (form) {
+                form.addEventListener('submit', async function (event) {
+                    event.preventDefault();
+
+                    const submitButtons = form.querySelectorAll('button[type="submit"]');
+                    submitButtons.forEach(function (btn) { btn.disabled = true; });
+
+                    try {
+                        const response = await fetch(form.action, {
+                            method: form.method || 'POST',
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            body: new FormData(form),
+                        });
+
+                        const data = await response.json().catch(function () { return {}; });
+                        if (!response.ok) {
+                            throw new Error(data.message || 'Ошибка запроса');
+                        }
+
+                        showStatus(data.message || form.getAttribute('data-success-text') || 'Готово', 'success');
+                    } catch (error) {
+                        showStatus(error.message || 'Ошибка запроса', 'error');
+                    } finally {
+                        submitButtons.forEach(function (btn) { btn.disabled = false; });
+                    }
+                });
+            });
+        })();
+
+        (function () {
+            const modal = document.getElementById('user-details-modal');
+            const content = document.getElementById('user-details-content');
+            const loading = document.getElementById('user-details-loading');
+            const errorBox = document.getElementById('user-details-error');
+            const links = document.querySelectorAll('.admin-subs-user-link');
+
+            if (!modal || !links.length) return;
+
+            function escapeHtml(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/\"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function formatRub(value) {
+                const num = Number(value || 0);
+                return num.toFixed(2) + ' руб.';
+            }
+
+            function closeModal() {
+                modal.classList.add('hidden');
+            }
+
+            function openModal() {
+                modal.classList.remove('hidden');
+            }
+
+            function setRows(targetId, rows, emptyText, colspan) {
+                const target = document.getElementById(targetId);
+                if (!target) return;
+                if (!rows.length) {
+                    target.innerHTML = '<tr><td class="px-2 py-2 text-gray-500" colspan="' + (colspan || 1) + '">' + escapeHtml(emptyText) + '</td></tr>';
+                    return;
+                }
+                target.innerHTML = rows.join('');
+            }
+
+            document.querySelectorAll('[data-close-user-details]').forEach(function (el) {
+                el.addEventListener('click', closeModal);
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                    closeModal();
+                }
+            });
+
+            links.forEach(function (link) {
+                link.addEventListener('click', async function () {
+                    const userId = link.getAttribute('data-user-id');
+                    if (!userId) return;
+
+                    openModal();
+                    if (content) content.classList.add('hidden');
+                    if (errorBox) {
+                        errorBox.classList.add('hidden');
+                        errorBox.textContent = '';
+                    }
+                    if (loading) loading.classList.remove('hidden');
+
+                    try {
+                        const response = await fetch('/admin/subscriptions/user/' + encodeURIComponent(userId) + '/details', {
+                            headers: { 'Accept': 'application/json' }
+                        });
+                        const data = await response.json().catch(function () { return {}; });
+                        if (!response.ok) {
+                            throw new Error(data.message || 'Не удалось загрузить данные пользователя');
+                        }
+
+                        document.getElementById('ud-user-id').textContent = data.user?.id ?? '—';
+                        document.getElementById('ud-user-name').textContent = data.user?.name ?? '—';
+                        document.getElementById('ud-user-email').textContent = data.user?.email ?? '—';
+                        document.getElementById('ud-user-phone').textContent = data.user?.phone ?? '—';
+                        document.getElementById('ud-user-role').textContent = data.user?.role ?? '—';
+                        document.getElementById('ud-user-registered').textContent = data.user?.registered_at ?? '—';
+                        document.getElementById('ud-user-referrer').textContent = data.user?.referrer
+                            ? ((data.user.referrer.name || 'N/A') + ' (#' + data.user.referrer.id + ')')
+                            : 'Без реферала';
+
+                        document.getElementById('ud-summary-payments').textContent = formatRub(data.summary?.total_payments_rub);
+                        document.getElementById('ud-summary-charges').textContent = formatRub(data.summary?.total_charges_rub);
+                        document.getElementById('ud-summary-balance').textContent = formatRub(data.summary?.balance_rub);
+
+                        const paymentRows = (data.payments || []).map(function (item) {
+                            return '<tr class=\"border-t border-gray-100\">'
+                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.created_at || '—') + '</td>'
+                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.amount_rub || '0.00') + ' руб.</td>'
+                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.order_name || '—') + '</td>'
+                                + '</tr>';
+                        });
+                        setRows('ud-payments-body', paymentRows, 'Нет успешных платежей', 3);
+
+                        const chargeRows = (data.charges || []).map(function (item, index) {
+                            const createdDate = item.created_at ? String(item.created_at).slice(0, 10) : '—';
+                            const rowClass = index % 2 === 1 ? ' bg-gray-50' : '';
+                            return '<tr class=\"border-t border-gray-100' + rowClass + '\">'
+                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(createdDate) + '</td>'
+                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.end_date || '—') + '</td>'
+                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.subscription_name || 'N/A') + ' (#' + escapeHtml(item.subscription_id) + ')</td>'
+                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.price_rub || '0.00') + ' руб.</td>'
+                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.action || '—') + '</td>'
+                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + (item.is_rebilling ? '✓' : '—') + '</td>'
+                                + '</tr>';
+                        });
+                        setRows('ud-charges-body', chargeRows, 'Нет списаний', 6);
+
+                        if (content) content.classList.remove('hidden');
+                    } catch (error) {
+                        if (errorBox) {
+                            errorBox.textContent = error.message || 'Ошибка загрузки данных';
+                            errorBox.classList.remove('hidden');
+                        }
+                    } finally {
+                        if (loading) loading.classList.add('hidden');
+                    }
+                });
+            });
+        })();
+    </script>
+    <style>
+        .admin-subs-tooltip {
+            cursor: help;
+        }
+
+        .admin-user-details-dialog {
+            width: min(1000px, calc(100% - 2rem));
+            margin: 2rem auto;
+        }
+    </style>
+</x-app-layout>
+
+

@@ -1,0 +1,13 @@
+.profile__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .profile__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

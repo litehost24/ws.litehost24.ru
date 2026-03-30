@@ -1,0 +1,132 @@
+<?php
+
+namespace App\Models\components;
+
+use BaconQrCode\Renderer\GDLibRenderer;
+use BaconQrCode\Writer;
+use BaconQrCode\Common\ErrorCorrectionLevel;
+use Throwable;
+
+class WireguardQrCode
+{
+    // 320px is often too small to reliably scan long WireGuard/AWG configs from a phone screen.
+    public static function makePng(string $config, int $size = 1200): ?string
+    {
+        $payload = self::buildAmneziaPayload($config);
+        if ($payload === '' || !extension_loaded('gd')) {
+            return null;
+        }
+
+        try {
+            $writer = new Writer(new GDLibRenderer($size));
+            return $writer->writeString($payload, 'UTF-8', ErrorCorrectionLevel::L());
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    public static function makeDataUri(string $config, int $size = 1200): ?string
+    {
+        $png = self::makePng($config, $size);
+        if (!$png) {
+            return null;
+        }
+
+        return 'data:image/png;base64,' . base64_encode($png);
+    }
+
+    public static function normalizeConfig(string $config): string
+    {
+        return self::normalizePayload($config);
+    }
+
+    private static function buildAmneziaPayload(string $config): string
+    {
+        $normalized = self::normalizePayload($config);
+        if ($normalized === '') {
+            return '';
+        }
+
+        [$host, $port] = self::extractEndpoint($normalized);
+
+        $payload = [
+            'containers' => [
+                [
+                    'awg' => [
+                        'isThirdPartyConfig' => true,
+                        'last_config' => $normalized,
+                        'port' => (string) $port,
+                        'transport_proto' => 'udp',
+                    ],
+                    'container' => 'amnezia-awg',
+                ],
+            ],
+            'defaultContainer' => 'amnezia-awg',
+            'description' => '',
+            'hostName' => (string) $host,
+        ];
+
+        $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            return '';
+        }
+
+        return base64_encode($json);
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private static function extractEndpoint(string $config): array
+    {
+        if (!preg_match('/^Endpoint\\s*=\\s*(\\S+)/mi', $config, $match)) {
+            return ['', ''];
+        }
+
+        $endpoint = trim((string) ($match[1] ?? ''));
+        if ($endpoint === '') {
+            return ['', ''];
+        }
+
+        $host = '';
+        $port = '';
+
+        if (str_starts_with($endpoint, '[')) {
+            $endPos = strpos($endpoint, ']');
+            if ($endPos !== false) {
+                $host = substr($endpoint, 1, $endPos - 1);
+                $rest = substr($endpoint, $endPos + 1);
+                if (str_starts_with($rest, ':')) {
+                    $port = substr($rest, 1);
+                }
+            } else {
+                $host = $endpoint;
+            }
+        } else {
+            $parts = explode(':', $endpoint);
+            if (count($parts) > 1) {
+                $port = (string) array_pop($parts);
+                $host = implode(':', $parts);
+            } else {
+                $host = $endpoint;
+            }
+        }
+
+        return [$host, $port];
+    }
+
+    private static function normalizePayload(string $config): string
+    {
+        if ($config === '') {
+            return '';
+        }
+
+        // Strip UTF-8 BOM if present.
+        if (str_starts_with($config, "\xEF\xBB\xBF")) {
+            $config = substr($config, 3);
+        }
+
+        // Normalize line endings to LF without trimming content.
+        return str_replace(["\r\n", "\r"], "\n", $config);
+    }
+}

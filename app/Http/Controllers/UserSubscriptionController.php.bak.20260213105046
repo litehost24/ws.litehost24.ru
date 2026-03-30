@@ -1,0 +1,430 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\components\Balance;
+use App\Models\components\FullConnectSubscription;
+use App\Models\components\UserSubscriptionInfo;
+use App\Models\Subscription;
+use App\Models\UserSubscription;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Foundation\Validation\ValidatesRequests;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Routing\Controller;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
+use Symfony\Component\HttpFoundation\BinaryFileResponse as BinaryFileResponseAlias;
+
+class UserSubscriptionController extends Controller
+{
+    use AuthorizesRequests, ValidatesRequests;
+
+    public function download(Request $request)
+    {
+        if (!in_array(Auth::user()->role, ['user', 'admin'], true)) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'subscription_id' => ['required', 'integer'],
+            'user_subscription_id' => ['nullable', 'integer'],
+        ]);
+
+        $userSub = null;
+        if (!empty($data['user_subscription_id'])) {
+            $userSub = UserSubscription::where('user_id', Auth::user()->id)
+                ->where('id', (int) $data['user_subscription_id'])
+                ->first();
+        }
+
+        if (!$userSub) {
+            $userSub = UserSubscription::where('user_id', Auth::user()->id)
+                ->where('subscription_id', $data['subscription_id'])
+                ->orderBy('id', 'desc')
+                ->first();
+        }
+
+        if (!$userSub || empty($userSub->file_path)) {
+            abort(404);
+        }
+
+        $relativePath = ltrim($userSub->file_path, '/');
+        if (str_starts_with($relativePath, 'storage/')) {
+            $relativePath = substr($relativePath, strlen('storage/'));
+        }
+
+        // Basic traversal guard (file_path is expected to be a relative path like files/.../*.zip).
+        if (str_contains($relativePath, '..')) {
+            abort(400);
+        }
+
+        if (!Storage::disk('public')->exists($relativePath)) {
+            abort(404);
+        }
+
+        $downloadName = basename($relativePath) ?: 'archive.zip';
+        return Storage::disk('public')->download($relativePath, $downloadName, [
+            'Content-Type' => 'application/zip',
+        ]);
+    }
+
+    /**
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
+     */
+    public function connect(): RedirectResponse|JsonResponse
+    {
+        // Referral gate: subscriptions can be purchased only by "user"/"admin" roles.
+        if (!in_array(Auth::user()->role, ['user', 'admin'], true)) {
+            if (request()->expectsJson()) {
+                return response()->json(['message' => 'Доступно только по реферальной ссылке.'], 403, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            return redirect()->back()->with('subscription-error', 'Доступно только по реферальной ссылке.');
+        }
+
+        $sub = Subscription::where('id', request()->get('id'))->first();
+        if (!$sub) {
+            if (request()->expectsJson()) {
+                return response()->json(['message' => 'Подписка не найдена.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            return redirect()->back()->with('subscription-error', 'Подписка не найдена.');
+        }
+
+        $fullConnectSubscription = new FullConnectSubscription($sub);
+
+        if ((new Balance)->getBalance() < $sub->price) {
+            if (request()->expectsJson()) {
+                return response()->json(['message' => 'Недостаточно средств'], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            return redirect()->back()->with('subscription-error', 'Недостаточно средств');
+        }
+
+        $userSubInfo = $this->getSubInfo();
+        $userSubInfo->setSubId($sub->id);
+
+        try {
+            if (!$userSubInfo->isWasConnected()) {
+                $fullConnectSubscription->create();
+
+                if (request()->expectsJson()) {
+                    return $this->subscriptionCardJson($sub, 'Подписка успешно подключена!!!');
+                }
+                return redirect()->back()->with('subscription-success', 'Подписка успешно подключена!!!');
+            }
+
+            if (!$userSubInfo->isRebillActive()) {
+                $fullConnectSubscription->activate();
+
+                if (request()->expectsJson()) {
+                    return $this->subscriptionCardJson($sub, 'Автопродление включено');
+                }
+                return redirect()->back()->with('subscription-success', 'Автопродление включено');
+            }
+        } catch (\Exception $e) {
+            \Log::error('Subscription connect error: ' . $e->getMessage());
+            if (request()->expectsJson()) {
+                return response()->json(['message' => 'Ошибка при подключении подписки'], 500, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            return redirect()->back()->with('subscription-error', 'Ошибка при подключении подписки');
+        }
+
+        if (request()->expectsJson()) {
+            return $this->subscriptionCardJson($sub, 'Готово');
+        }
+
+        return redirect()->back();
+    }
+
+    /**
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
+     */
+    public function disconnect(): RedirectResponse
+    {
+        $sub = Subscription::where('id', request()->get('id'))->first();
+        $fullConnectSubscription = new FullConnectSubscription($sub);
+        $userSubInfo = $this->getSubInfo();
+
+        if ($userSubInfo->setSubId($sub->id)->isConnected()) {
+            $fullConnectSubscription->deactivate();
+
+            return redirect()->back()->with('subscription-success', 'Автопродление успешно отключено');
+        }
+
+        return redirect()->back();
+    }
+
+    /**
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
+     */
+    public function markAsDone(): RedirectResponse
+    {
+        if (!Auth::user()->isAdmin()) {
+            return redirect()->route('home');
+        }
+
+        (new FullConnectSubscription)->markAsDone();
+
+        return redirect()->back();
+    }
+
+    /**
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
+     */
+    public function markAsDoneAndLoadFile(): RedirectResponse|BinaryFileResponseAlias
+    {
+        if (!Auth::user()->isAdmin()) {
+            return redirect()->route('home');
+        }
+
+        (new FullConnectSubscription)->markAsDoneAndLoadFile();
+
+        return redirect()->back();
+    }
+
+    public function manage(): View | RedirectResponse
+    {
+        if (!Auth::user()->isAdmin()) {
+            return redirect()->route('home');
+        }
+
+        $today = Carbon::today()->toDateString();
+
+        $latestIds = UserSubscription::select(DB::raw('MAX(id)'))
+            ->groupBy('user_id', 'subscription_id');
+
+        $userSubs = UserSubscription::whereIn('id', $latestIds)
+            ->where('is_processed', 0);
+
+        $createUserSubs = (clone $userSubs)
+            ->where('action', 'create')
+            ->get();
+
+        // Exclude auto "await payment" records from manual activation queue.
+        $activateUserSubs = (clone $userSubs)
+            ->where('action', 'activate')
+            ->where(function ($query) use ($today) {
+                $query->where('is_rebilling', false)
+                    ->orWhere('end_date', '>', $today)
+                    ->orWhere('end_date', UserSubscription::AWAIT_PAYMENT_DATE);
+            })
+            ->get();
+
+        $deactivateUserSubs = (clone $userSubs)
+            ->where('action', 'deactivate')
+            ->get();
+
+        return view('user-subscriptions.manage', [
+            'createUserSubs' => $createUserSubs,
+            'activateUserSubs' => $activateUserSubs,
+            'deactivateUserSubs' => $deactivateUserSubs,
+        ]);
+    }
+
+    public function addVpn(Request $request): RedirectResponse|JsonResponse
+    {
+        if (!in_array(Auth::user()->role, ['user', 'admin'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Добавление VPN доступно только пользователям.'], 403, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            return redirect()->back()->with('subscription-error', 'Добавление VPN доступно только пользователям.');
+        }
+
+        $data = $request->validate([
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $activeSubList = UserSubscription::getActiveList();
+        $activeVpnCount = $activeSubList
+            ->filter(fn ($sub) => $sub->subscription && $sub->subscription->name === 'VPN')
+            ->count();
+
+        $vpnList = Subscription::where('name', 'VPN')->orderBy('id', 'asc')->get();
+        if ($vpnList->isEmpty()) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'VPN-подписки не найдены.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            return redirect()->back()->with('subscription-error', 'VPN-подписки не найдены.');
+        }
+
+        if ($activeVpnCount < $vpnList->count()) {
+            $sub = $vpnList[$activeVpnCount];
+        } else {
+            $last = $vpnList->last();
+            $sub = Subscription::create([
+                'name' => $last->name,
+                'description' => $last->description,
+                'price' => $last->price,
+                'is_hidden' => 1,
+            ]);
+        }
+
+        if ((new Balance)->getBalance() < $sub->price) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Недостаточно средств'], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            return redirect()->back()->with('subscription-error', 'Недостаточно средств');
+        }
+
+        try {
+            $fullConnectSubscription = new FullConnectSubscription($sub, $data['note'] ?? null);
+            $fullConnectSubscription->create();
+        } catch (\Exception $e) {
+            \Log::error('Subscription add VPN error: ' . $e->getMessage());
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Ошибка при подключении VPN'], 500, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            return redirect()->back()->with('subscription-error', 'Ошибка при подключении VPN');
+        }
+
+        if ($request->expectsJson()) {
+            $activeSubList = UserSubscription::getActiveList();
+            $subInfo = new UserSubscriptionInfo($activeSubList);
+            $cardHtml = view('payment.service-block__card', [
+                'sub' => $sub,
+                'subInfo' => $subInfo,
+            ])->render();
+
+            $nextVpnPriceRub = null;
+            $activeVpnCount = $activeSubList
+                ->filter(fn ($item) => $item->subscription && $item->subscription->name === 'VPN')
+                ->count();
+            $vpnList = Subscription::where('name', 'VPN')->orderBy('id', 'asc')->get();
+            if ($vpnList->isNotEmpty()) {
+                $vpnSub = $activeVpnCount < $vpnList->count() ? $vpnList[$activeVpnCount] : $vpnList->last();
+                $nextVpnPriceRub = $vpnSub?->priceRub();
+            }
+
+            $payload = [
+                'message' => 'VPN подключен',
+                'card_html' => $cardHtml,
+                'balance_rub' => (new Balance)->getBalanceRub(),
+                'next_vpn_price_rub' => $nextVpnPriceRub,
+            ];
+
+            return response()->json($payload, 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        return redirect()->back()->with('subscription-success', 'VPN подключен');
+    }
+
+    public function updateNote(Request $request): RedirectResponse|JsonResponse
+    {
+        if (!in_array(Auth::user()->role, ['user', 'admin'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Редактирование доступно только пользователям.'], 403, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            return redirect()->back()->with('subscription-error', 'Редактирование доступно только пользователям.');
+        }
+
+        $data = $request->validate([
+            'subscription_id' => ['nullable', 'integer', 'required_without:user_subscription_id'],
+            'user_subscription_id' => ['nullable', 'integer', 'required_without:subscription_id'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $userSub = null;
+        if (!empty($data['user_subscription_id'])) {
+            $userSub = UserSubscription::where('user_id', Auth::user()->id)
+                ->where('id', (int) $data['user_subscription_id'])
+                ->first();
+        }
+
+        if (!$userSub && !empty($data['subscription_id'])) {
+            $userSub = UserSubscription::where('user_id', Auth::user()->id)
+                ->where('subscription_id', $data['subscription_id'])
+                ->orderBy('id', 'desc')
+                ->first();
+        }
+
+        if (!$userSub) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Подписка не найдена.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            return redirect()->back()->with('subscription-error', 'Подписка не найдена.');
+        }
+
+        $userSub->update([
+            'note' => $data['note'],
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['message' => 'Пометка обновлена.', 'note' => $data['note']], 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        return redirect()->back()->with('subscription-success', 'Пометка обновлена.');
+    }
+
+    public function toggleRebill(): RedirectResponse|JsonResponse
+    {
+        $subId = request()->get('id');
+        $action = request()->get('action'); // 'enable' or 'disable'
+
+        $userSub = UserSubscription::where('user_id', Auth::user()->id)
+            ->where('subscription_id', $subId)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($userSub) {
+            $sub = Subscription::where('id', $subId)->first();
+
+            if ($action === 'disable') {
+                $userSub->update(['is_rebilling' => false]);
+
+                if (request()->expectsJson()) {
+                    return $this->subscriptionCardJson($sub, 'Автопродление отключено');
+                }
+                return redirect()->back()->with('subscription-success', 'Автопродление отключено');
+            } elseif ($action === 'enable') {
+                $userSub->update(['is_rebilling' => true]);
+
+                if (request()->expectsJson()) {
+                    return $this->subscriptionCardJson($sub, 'Автопродление включено');
+                }
+                return redirect()->back()->with('subscription-success', 'Автопродление включено');
+            }
+        }
+
+        if (request()->expectsJson()) {
+            return response()->json(['message' => 'Ошибка при изменении автопродления'], 400, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+        return redirect()->back()->with('subscription-error', 'Ошибка при изменении автопродления');
+    }
+
+    private function subscriptionCardJson(?Subscription $sub, string $message): JsonResponse
+    {
+        if (!$sub) {
+            return response()->json(['message' => $message], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        $activeSubList = UserSubscription::getActiveList();
+        $subInfo = new UserSubscriptionInfo($activeSubList);
+        $cardHtml = view('payment.service-block__card', [
+            'sub' => $sub,
+            'subInfo' => $subInfo,
+        ])->render();
+
+        $payload = [
+            'message' => $message,
+            'card_html' => $cardHtml,
+            'balance_rub' => (new Balance)->getBalanceRub(),
+        ];
+
+        return response()->json($payload, 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
+    }
+
+    private function getSubInfo(): UserSubscriptionInfo
+    {
+        $activeSubList = UserSubscription::getActiveList();
+        return new UserSubscriptionInfo($activeSubList);
+    }
+}

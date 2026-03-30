@@ -1,0 +1,84 @@
+<x-app-layout>
+    <div class="py-12">
+        <div class="max-w-6xl mx-auto sm:px-6 lg:px-8">
+            <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
+                <div class="p-6 lg:p-8 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">Партнерские рефералы</h3>
+                    <div class="mt-2 text-sm text-gray-600">
+                        @if ($baseMin !== null && $baseMax !== null)
+                            @if ($baseMin === $baseMax)
+                                Базовая цена VPN: {{ number_format($baseMin / 100, 2, '.', ' ') }} ₽. Наценка применяется ко всем VPN‑уровням.
+                            @else
+                                Базовая цена VPN: от {{ number_format($baseMin / 100, 2, '.', ' ') }} ₽ до {{ number_format($baseMax / 100, 2, '.', ' ') }} ₽. Наценка применяется ко всем VPN‑уровням.
+                            @endif
+                        @else
+                            Базовые цены VPN не найдены.
+                        @endif
+                    </div>
+                    @if (session('status') === 'saved')
+                        <div class="mt-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                            Наценка сохранена.
+                        </div>
+                    @endif
+                </div>
+                <div class="p-6 lg:p-8">
+                    <div class="overflow-auto rounded-md border border-gray-200">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-gray-50 text-gray-600">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">ID</th>
+                                    <th class="px-3 py-2 text-left">Имя</th>
+                                    <th class="px-3 py-2 text-left">Email</th>
+                                    <th class="px-3 py-2 text-left">Наценка, ₽</th>
+                                    <th class="px-3 py-2 text-left">Итог (мин), ₽</th>
+                                    <th class="px-3 py-2 text-left">Действие</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($referrals as $ref)
+                                    @php
+                                        $rule = $rules->get($ref->id);
+                                        $markupCents = (int) ($rule->markup_cents ?? 0);
+                                        $markupRub = intdiv($markupCents, 100);
+                                        $baseMinCents = (int) ($baseMin ?? 0);
+                                        $finalMinRub = $baseMin !== null
+                                            ? number_format(($baseMinCents + $markupCents) / 100, 2, '.', ' ')
+                                            : '—';
+                                    @endphp
+                                    <tr class="{{ $loop->even ? 'bg-gray-50' : '' }}">
+                                        <td class="px-3 py-2 whitespace-nowrap">{{ $ref->id }}</td>
+                                        <td class="px-3 py-2 whitespace-nowrap">{{ $ref->name }}</td>
+                                        <td class="px-3 py-2 whitespace-nowrap">{{ $ref->email }}</td>
+                                        <td class="px-3 py-2">
+                                            <form method="POST" action="{{ route('partner.referrals.pricing', ['referral' => $ref->id]) }}" class="flex items-center gap-2">
+                                                @csrf
+                                                <input
+                                                    type="number"
+                                                    name="markup_rub"
+                                                    min="0"
+                                                    step="1"
+                                                    value="{{ old('markup_rub', $markupRub) }}"
+                                                    class="w-24 h-9 rounded-md border border-gray-300 px-2 text-sm"
+                                                >
+                                        </td>
+                                        <td class="px-3 py-2 whitespace-nowrap">{{ $finalMinRub }}</td>
+                                        <td class="px-3 py-2">
+                                                <button type="submit" class="inline-flex h-9 items-center rounded-md border border-gray-300 px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                                                    Сохранить
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td class="px-3 py-3 text-gray-500" colspan="6">Рефералов пока нет.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</x-app-layout>

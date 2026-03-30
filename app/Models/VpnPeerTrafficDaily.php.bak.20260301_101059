@@ -1,0 +1,31 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class VpnPeerTrafficDaily extends Model
+{
+    use HasFactory;
+
+    protected $table = 'vpn_peer_traffic_daily';
+
+    protected $fillable = [
+        'date',
+        'server_id',
+        'user_id',
+        'peer_name',
+        'public_key',
+        'ip',
+        'rx_bytes_delta',
+        'tx_bytes_delta',
+        'total_bytes_delta',
+    ];
+
+    protected $casts = [
+        'rx_bytes_delta' => 'integer',
+        'tx_bytes_delta' => 'integer',
+        'total_bytes_delta' => 'integer',
+    ];
+}

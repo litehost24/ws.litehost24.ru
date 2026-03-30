@@ -1,0 +1,86 @@
+@php
+    $id = (string) ($id ?? '0');
+    $wireguardConfig = (string) ($wireguardConfig ?? '');
+    $awgConfigUrl = (string) ($awgConfigUrl ?? '');
+    $fileUrl = (string) ($fileUrl ?? '');
+@endphp
+
+<div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #111827;">
+    <h3 style="margin: 0 0 10px;">Для компьютера (Windows)</h3>
+    <div style="margin-bottom: 10px;">
+        <div style="font-weight: 600;">Вариант 1: AmneziaWG</div>
+        <ol style="margin: 6px 0 0 18px; padding: 0;">
+            <li>Скачайте приложение <strong>AmneziaWG</strong> для Windows: <a href="/storage/files/amneziawg-amd64-1.0.2.msi">amneziawg-amd64-1.0.2.msi</a>.</li>
+            <li>Импортируйте конфигурационный файл <code>peer-1.conf</code> из архива в приложение <strong>AmneziaWG</strong> или вставьте конфигурацию ниже.</li>
+            <li>Активируйте подключение.</li>
+        </ol>
+    </div>
+    <div style="margin-bottom: 16px;">
+        <div style="font-weight: 600;">Вариант 2: Протокол VLESS</div>
+        <ol style="margin: 6px 0 0 18px; padding: 0;">
+            <li>Скачайте программу <a href="/storage/files/setup-Happ.x64.exe">setup-Happ.x64.exe</a>.</li>
+            <li>Скопируйте конфигурационные строки ниже.</li>
+            <li>Импортируйте настройки в приложении.</li>
+        </ol>
+    </div>
+
+    <h3 style="margin: 0 0 10px;">Для мобильного устройства (Android)</h3>
+    <div style="margin-bottom: 10px;">
+        <div style="font-weight: 600;">Вариант 1: AmneziaWG</div>
+        <ol style="margin: 6px 0 0 18px; padding: 0;">
+            <li>Установите приложение <strong>Amnezia VPN</strong> из Google Play Market.</li>
+            <li>Импортируйте конфигурационный файл <code>peer-1.conf</code> из архива или отсканируйте QR-код ниже.</li>
+            <li>Если при сканировании QR появляется ошибка (например, код 900), используйте вставку конфигурации из буфера ниже.</li>
+            <li>Активируйте подключение.</li>
+        </ol>
+    </div>
+    <div style="margin-bottom: 16px;">
+        <div style="font-weight: 600;">Вариант 2: Протокол VLESS</div>
+        <ol style="margin: 6px 0 0 18px; padding: 0;">
+            <li>Установите приложение <strong>v2rayTun</strong> из Google Play Market.</li>
+            <li>Скопируйте конфигурационные строки ниже.</li>
+            <li>Импортируйте настройки в приложении.</li>
+        </ol>
+    </div>
+
+    @if(!empty($wireguardConfig))
+        <div style="margin: 0 0 8px; font-weight: 600;">AmneziaWG конфигурация</div>
+        <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom: 16px;">
+            <textarea id="instruction-awg-config-{{ $id }}" readonly rows="10" style="flex:1; padding: 10px 12px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;">{{ $wireguardConfig }}</textarea>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <button type="button" onclick="copyInstructionAwgConfig({{ (int) $id }})" style="white-space:nowrap; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; border-radius: 6px; font-weight: 600; cursor: pointer;">Копировать</button>
+                @if(!empty($awgConfigUrl))
+                    <a href="{{ $awgConfigUrl }}" style="text-align:center; white-space:nowrap; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; border-radius: 6px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111827;">Скачать .conf</a>
+                @else
+                    <button type="button" onclick="downloadInstructionAwgConfig({{ (int) $id }})" style="white-space:nowrap; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; border-radius: 6px; font-weight: 600; cursor: pointer;">Скачать .conf</button>
+                @endif
+            </div>
+        </div>
+    @endif
+
+    <div style="margin: 0 0 8px; font-weight: 600;">VLESS конфигурация</div>
+    <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom: 16px;">
+        <textarea id="instruction-config-{{ $id }}" readonly rows="3" style="flex:1; padding: 10px 12px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;">{{ $vlessUrl }}</textarea>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            <button type="button" onclick="copyInstructionConfig({{ (int) $id }})" style="white-space:nowrap; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; border-radius: 6px; font-weight: 600; cursor: pointer;">Копировать</button>
+            @if(!empty($fileUrl))
+                <a href="{{ $fileUrl }}" download style="text-align:center; white-space:nowrap; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; border-radius: 6px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111827;">Скачать</a>
+            @endif
+        </div>
+    </div>
+
+    @if(!empty($wireguardQrDataUri))
+        <div style="margin: 0 0 8px; font-weight: 600;">AmneziaWG QR-код</div>
+        <div style="margin-bottom: 16px;">
+            <img
+                src="{{ $wireguardQrDataUri }}"
+                alt="AmneziaWG QR"
+                style="width: min(1200px, 90vw); height: auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px; background: #fff; image-rendering: pixelated;"
+            >
+        </div>
+    @endif
+
+    <div style="margin-top: 12px; color: #6b7280;">
+        Можно подключиться любым удобным способом: через VLESS или через AmneziaWG.
+    </div>
+</div>

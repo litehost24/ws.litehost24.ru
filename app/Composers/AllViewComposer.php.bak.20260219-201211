@@ -1,0 +1,115 @@
+<?php namespace App\Composers;
+
+use App\Lists\MainMenuList;
+use App\Lists\pages\ContactList;
+use App\Lists\SideMenuList;
+use Illuminate\Support\Facades\Auth;
+
+class AllViewComposer
+{
+    private function contactEmailCaptchaQuestion(): ?string
+    {
+        if (Auth::check()) {
+            return null;
+        }
+
+        $now = time();
+        $a = (int) session('contact_email_captcha_a', 0);
+        $b = (int) session('contact_email_captcha_b', 0);
+        $expiresAt = (int) session('contact_email_captcha_expires_at', 0);
+
+        if ($a < 1 || $b < 1 || $expiresAt < $now) {
+            $a = random_int(1, 9);
+            $b = random_int(1, 9);
+
+            session([
+                'contact_email_captcha_a' => $a,
+                'contact_email_captcha_b' => $b,
+                'contact_email_captcha_expires_at' => $now + (30 * 60),
+            ]);
+        }
+
+        // Used to block ultra-fast bot posts.
+        if (!session()->has('contact_email_form_started_at')) {
+            session(['contact_email_form_started_at' => $now]);
+        }
+
+        return $a . ' + ' . $b;
+    }
+
+    private function ensureReferralLink(): void
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return;
+        }
+
+        if (!in_array($user->role, ['user', 'admin'], true)) {
+            return;
+        }
+
+        // Avoid changing referral links for unverified accounts.
+        if (empty($user->email_verified_at)) {
+            return;
+        }
+
+        $ref = (string) ($user->ref_link ?? '');
+
+        // Our referral links are sha1 hex. If DB contains garbage (e.g. bcrypt hash),
+        // generate a new one so sharing works (and Telegram deep-links stay short).
+        if (!preg_match('/^[a-f0-9]{40}$/i', $ref)) {
+            $user->forceFill(['ref_link' => sha1($user->id . time())])->save();
+        }
+    }
+
+    private function mainMenu(): array
+    {
+        return MainMenuList::$unauthMenu;
+    }
+
+    private function sideMenu(): array
+    {
+        $menu = [];
+
+        if (Auth::user() !== null) {
+            $menu = array_merge($menu, SideMenuList::$authMenu);
+        }
+
+        return $menu;
+    }
+
+    private function sideMenuAdmin(): array
+    {
+        $menu = [];
+
+        if (Auth::user() !== null && Auth::user()->isAdmin()) {
+            $menu = array_merge($menu, SideMenuList::$adminMenu);
+        }
+
+        return $menu;
+    }
+
+    private function sideMenuSettings(): array
+    {
+        $menu = [];
+
+        if (Auth::user() !== null) {
+            $menu = array_merge($menu, SideMenuList::$authMenuSettings);
+        }
+
+        return $menu;
+    }
+
+    public function compose($view): void
+    {
+        $this->ensureReferralLink();
+
+        $view->with('mainMenu', $this->mainMenu());
+        $view->with('sideMenu', $this->sideMenu());
+        $view->with('sideMenuSettings', $this->sideMenuSettings());
+        $view->with('sideMenuAdmin', $this->sideMenuAdmin());
+
+        $view->with('contacts', ContactList::$info);
+        $view->with('contactEmailCaptchaQuestion', $this->contactEmailCaptchaQuestion());
+    }
+}

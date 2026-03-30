@@ -1,0 +1,228 @@
+# Server-1 VPN Runbook (AmneziaWG + Xray + DNS + awgctl)
+
+Last updated: 2026-02-12
+
+This file documents what we built on Server-1 so we can reproduce/debug and build the API next.
+
+## Current Architecture
+
+Client (AmneziaWG app)
+-> Server-1: AmneziaWG interface `awg0` (10.66.66.1/24, UDP 51820)
+-> Server-1: iptables TCP redirect (PREROUTING on `awg0`) to Xray inbound `10.66.66.1:12345`
+-> Server-1: Xray outbound VLESS/REALITY to Server-2 (3X-UI)
+-> Internet egress: Server-2 public IP
+
+DNS for clients:
+Client -> `dnsmasq` on Server-1 (listens on `10.66.66.1:53`) -> upstream 1.1.1.1 / 8.8.8.8
+
+Notes:
+- This setup is TCP-centric. DNS is handled. UDP apps are not guaranteed.
+- AmneziaWG obfuscation parameters must match on client and server.
+
+## Key Paths On Server-1
+
+- AmneziaWG config: `/etc/amnezia/amneziawg/awg0.conf`
+- Server public key (optional fallback file): `/etc/wireguard/awg0.pub`
+- Xray config: `/usr/local/etc/xray/config.json`
+- Xray logs: `/var/log/xray/access.log`, `/var/log/xray/error.log`
+- dnsmasq config: `/etc/dnsmasq.d/awg0.conf`
+- iptables persistence: `/etc/iptables/rules.v4`
+- sysctl persistence: `/etc/sysctl.d/99-forward.conf`
+- awgctl binary: `/usr/local/bin/awgctl`
+- vpn-agent binary (systemd ExecStart): `/usr/local/bin/vpn-agent`
+- awgctl DB: `/var/lib/awgctl/db.json`
+- awgctl encrypted client configs: `/var/lib/awgctl/clients/*.conf.enc`
+- awgctl encryption passphrase (root-only): `/etc/awgctl/master.pass`
+
+## Services/State Checks
+
+### AmneziaWG (awg0)
+- Show interface + peers:
+  - `awg show`
+- Reload interface from config (drops connections briefly):
+  - `awgctl reload`
+
+### dnsmasq
+- Status:
+  - `systemctl status dnsmasq --no-pager`
+- Listening:
+  - `ss -lunp | grep ':53'`
+
+### Xray
+- Status:
+  - `systemctl status xray --no-pager`
+- Listening:
+  - `ss -lntp | grep ':12345'`
+- Access log:
+  - `tail -n 50 /var/log/xray/access.log`
+- Error log:
+  - `tail -n 50 /var/log/xray/error.log`
+
+### iptables
+- PREROUTING rule exists:
+  - `iptables -t nat -S PREROUTING | head`
+- Counters:
+  - `iptables -t nat -L PREROUTING -v -n --line-numbers`
+- Anti-abuse chain:
+  - `iptables -t mangle -S AWG_GUARD`
+- Anti-abuse counters:
+  - `iptables -t mangle -L AWG_GUARD -v -n --line-numbers`
+
+### Anti-abuse / Anti-torrent
+- Apply/re-apply guard manually:
+  - `/usr/local/sbin/awg-guard-apply`
+- Guard is auto-applied after `wg-quick@awg0` start via:
+  - `/etc/systemd/system/wg-quick@awg0.service.d/30-awg-guard.conf`
+- Current default protection:
+  - block common BitTorrent/DHT ports (`6881-6999`, `6969`, `51413`, `2710`, `1337`) for TCP/UDP on `awg0`
+  - limit excessive TCP connection fan-out per peer (connlimit)
+  - rate-limit SYN bursts per peer (hashlimit)
+  - soft shaping on `awg0` + `ifb0` using `tc cake` (fallback `fq_codel`)
+
+## Network Parameters
+
+Server-1:
+- Public IP (example used): `85.193.90.214`
+- AmneziaWG:
+  - Interface: `awg0`
+  - Address: `10.66.66.1/24`
+  - UDP port: `51820`
+- DNS for clients: `10.66.66.1`
+
+Xray:
+- inbound: `10.66.66.1:12345` (dokodemo-door redir tcp)
+- outbound: VLESS/REALITY to Server-2 (values taken from vless:// link)
+
+## AmneziaWG Obfuscation Parameters (must match on clients)
+
+These were used on the server:
+- `Jc = 4`
+- `Jmin = 8`
+- `Jmax = 80`
+- `S1 = 70`
+- `S2 = 130`
+- `H1 = 127664123`
+- `H2 = 127664124`
+- `H3 = 127664125`
+- `H4 = 127664126`
+
+## Client Config Template (reference)
+
+Do not store private keys in plaintext long-term unless needed for delivery.
+
+```ini
+[Interface]
+PrivateKey = <CLIENT_PRIVATE_KEY>
+Address = 10.66.66.X/32
+DNS = 10.66.66.1
+MTU = 1420
+
+Jc = 4
+Jmin = 8
+Jmax = 80
+S1 = 70
+S2 = 130
+H1 = 127664123
+H2 = 127664124
+H3 = 127664125
+H4 = 127664126
+
+[Peer]
+PublicKey = <SERVER_PUBLIC_KEY>
+Endpoint = 85.193.90.214:51820
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
+```
+
+## awgctl CLI (what it does)
+
+`awgctl` manages peers and persistence:
+- Source of truth for desired peers: `/var/lib/awgctl/db.json`
+- It renders `/etc/amnezia/amneziawg/awg0.conf` with enabled peers and applies it.
+- It stores generated client configs encrypted at rest.
+
+### List peers
+- `awgctl list`
+
+### Disable/enable by public key
+- `awgctl disable <PUBKEY>`
+- `awgctl enable <PUBKEY>`
+
+### Create new client (server generates keys)
+- Print config now and store encrypted:
+  - `awgctl create --name user42 --print`
+- Store plaintext in a file (and encrypted too):
+  - `awgctl create --name user42 --out /root/user42.conf`
+
+### Export (decrypt) stored config
+- By name:
+  - `awgctl export-name user42 --out /root/user42.conf`
+- By pubkey:
+  - `awgctl export <PUBKEY> --out /root/user42.conf`
+
+### Reload interface from config (if runtime peers disappear)
+- `awgctl reload`
+
+## Known Pitfalls We Hit
+
+1) Client "internet disappears" when `AllowedIPs=0.0.0.0/0` and there is no handshake/peer.
+   - Fix: temporarily use `AllowedIPs=10.66.66.0/24` while debugging handshake.
+
+2) dnsmasq failed: "bad option" because a command line got written into the config file.
+   - Fix: ensure `/etc/dnsmasq.d/awg0.conf` contains only dnsmasq directives.
+
+3) Xray config corruption due to terminal paste losing lines.
+   - Fix: use editor or small sed fixes; always validate with:
+     - `xray run -test -config /usr/local/etc/xray/config.json`
+
+4) Clients appearing to connect from Server-2 IP during testing.
+   - Cause: client device had another VPN/proxy enabled.
+   - Fix: disable other VPNs during testing, confirm with tcpdump.
+
+5) Encrypted config storage:
+   - OpenSSL `enc` on Ubuntu may not support AEAD (GCM) via `enc`.
+   - We switched to `aes-256-cbc` with `pbkdf2` and `-md sha256`.
+   - Filename uses sha256(pubkey), since pubkeys can contain `/`.
+
+## API Validation Snapshot (2026-02-12, from local machine)
+
+Target server:
+- `85.193.90.214`
+
+mTLS:
+- `GET /v1/health` with client cert works (`{"ok": true}`).
+- Same request without client cert returns nginx `400 No required SSL certificate was sent`.
+
+Lifecycle endpoints:
+- `POST /v1/create` works.
+- `GET /v1/export-name/<name>` works.
+- `GET /v1/peers-stats` works.
+- `POST /v1/disable` works.
+- `POST /v1/enable` works.
+- Legacy paths also work: `POST /v1/disable-name`, `POST /v1/enable-name`.
+
+Conclusion:
+- Server-1 API is test-ready for `health/create/export/disable/enable` over mTLS.
+- We added compatibility aliases on Server-1 so both `*/disable` and `*/disable-name` (same for enable) are accepted.
+
+Repro command:
+- `bash vpn-agent-mtls/smoke_test_api.sh`
+
+## Next: API Plan (high level)
+
+Goal: Laravel server (separate machine) can create/disable/enable/export clients via a secure API on Server-1.
+
+Recommended approach:
+1) Server-1: nginx reverse proxy with mTLS on port 443, proxying to a local agent on 127.0.0.1.
+2) Agent exposes minimal endpoints and executes `awgctl`:
+   - `POST /v1/create {name}` -> runs `awgctl create --name <name>` and returns config (or returns an ID, and client downloads via export).
+   - `POST /v1/disable {name|pubkey}`
+   - `POST /v1/enable {name|pubkey}`
+   - `GET /v1/export?name=...` -> returns decrypted config (or pre-signed one-time URL)
+   - `GET /v1/status?name=...` -> parses `awg show`
+   - `GET /v1/health` -> checks xray/dnsmasq/iptables/awg0
+
+Security notes:
+- Do not expose agent without mTLS and (optionally) IP allowlist.
+- PrivateKey delivery should be one-time where possible.
+- If you keep encrypted configs server-side, protect `/etc/awgctl/master.pass` (600, root-only) and back it up securely.

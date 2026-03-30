@@ -1,0 +1,205 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Server;
+use App\Models\Subscription;
+use App\Models\User;
+use App\Models\UserSubscription;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
+use Tests\TestCase;
+
+class VpnTrafficCollectCommandTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_collects_only_for_local_active_and_server_enabled_peers(): void
+    {
+        if (!Schema::hasColumn('servers', 'node1_api_url')) {
+            Schema::table('servers', function (Blueprint $table) {
+                $table->string('node1_api_url')->nullable();
+                $table->string('node1_api_ca_path')->nullable();
+                $table->string('node1_api_cert_path')->nullable();
+                $table->string('node1_api_key_path')->nullable();
+                $table->boolean('node1_api_enabled')->default(false);
+            });
+        }
+
+        $server = Server::create([
+            'ip1' => '85.193.90.214',
+            'username1' => 'root',
+            'password1' => 'secret',
+            'url1' => 'https://example.invalid',
+            'node1_api_url' => 'https://node1.example',
+            'node1_api_ca_path' => '/tmp/ca.crt',
+            'node1_api_cert_path' => '/tmp/client.crt',
+            'node1_api_key_path' => '/tmp/client.key',
+            'node1_api_enabled' => 1,
+            'ip2' => '79.110.227.174',
+            'username2' => 'admin',
+            'password2' => 'secret',
+            'url2' => 'https://example2.invalid',
+        ]);
+
+        $activeUser = User::factory()->create();
+        $inactiveUser = User::factory()->create();
+        $subscription = Subscription::factory()->create();
+
+        UserSubscription::factory()->create([
+            'user_id' => $activeUser->id,
+            'subscription_id' => $subscription->id,
+            'is_processed' => true,
+            'action' => 'create',
+            'file_path' => "files/{$activeUser->id}_79186873191_{$server->id}_12_02_2026_13_22/{$activeUser->id}_79186873191_{$server->id}_12_02_2026_13_22.zip",
+        ]);
+
+        UserSubscription::factory()->create([
+            'user_id' => $inactiveUser->id,
+            'subscription_id' => $subscription->id,
+            'is_processed' => false,
+            'action' => 'create',
+            'file_path' => "files/{$inactiveUser->id}_70000000000_{$server->id}_12_02_2026_13_22/{$inactiveUser->id}_70000000000_{$server->id}_12_02_2026_13_22.zip",
+        ]);
+
+        Http::fake([
+            'https://node1.example/v1/peers-status' => Http::sequence()
+                ->push([
+                    'ok' => true,
+                    'peers' => [
+                        [
+                            'name' => '79186873191',
+                            'public_key' => 'pub-active',
+                            'ip' => '10.66.66.15/32',
+                            'enabled' => true,
+                            'latest_handshake_epoch' => 100,
+                        ],
+                        [
+                            'name' => '70000000000',
+                            'public_key' => 'pub-inactive',
+                            'ip' => '10.66.66.16/32',
+                            'enabled' => false,
+                            'latest_handshake_epoch' => 100,
+                        ],
+                    ],
+                ], 200)
+                ->push([
+                    'ok' => true,
+                    'peers' => [
+                        [
+                            'name' => '79186873191',
+                            'public_key' => 'pub-active',
+                            'ip' => '10.66.66.15/32',
+                            'enabled' => true,
+                            'latest_handshake_epoch' => 110,
+                        ],
+                        [
+                            'name' => '70000000000',
+                            'public_key' => 'pub-inactive',
+                            'ip' => '10.66.66.16/32',
+                            'enabled' => false,
+                            'latest_handshake_epoch' => 110,
+                        ],
+                    ],
+                ], 200),
+            'https://node1.example/v1/peers-stats' => Http::sequence()
+                ->push([
+                    'ok' => true,
+                    'peers' => [
+                        [
+                            'name' => '79186873191',
+                            'public_key' => 'pub-active',
+                            'ip' => '10.66.66.15/32',
+                            'rx_bytes' => 1000,
+                            'tx_bytes' => 2000,
+                            'latest_handshake_epoch' => 100,
+                        ],
+                        [
+                            'name' => '70000000000',
+                            'public_key' => 'pub-inactive',
+                            'ip' => '10.66.66.16/32',
+                            'rx_bytes' => 500,
+                            'tx_bytes' => 1000,
+                            'latest_handshake_epoch' => 100,
+                        ],
+                    ],
+                ], 200)
+                ->push([
+                    'ok' => true,
+                    'peers' => [
+                        [
+                            'name' => '79186873191',
+                            'public_key' => 'pub-active',
+                            'ip' => '10.66.66.15/32',
+                            'rx_bytes' => 1400,
+                            'tx_bytes' => 2800,
+                            'latest_handshake_epoch' => 110,
+                        ],
+                        [
+                            'name' => '70000000000',
+                            'public_key' => 'pub-inactive',
+                            'ip' => '10.66.66.16/32',
+                            'rx_bytes' => 900,
+                            'tx_bytes' => 1500,
+                            'latest_handshake_epoch' => 110,
+                        ],
+                    ],
+                ], 200),
+        ]);
+
+        $this->artisan('vpn:traffic-collect --once')->assertExitCode(0);
+
+        $this->assertDatabaseHas('vpn_peer_server_states', [
+            'server_id' => $server->id,
+            'peer_name' => '79186873191',
+            'server_status' => 'enabled',
+            'user_id' => $activeUser->id,
+        ]);
+
+        $this->assertDatabaseHas('vpn_peer_server_states', [
+            'server_id' => $server->id,
+            'peer_name' => '70000000000',
+            'server_status' => 'disabled',
+            'user_id' => $inactiveUser->id,
+        ]);
+
+        $this->assertDatabaseHas('vpn_peer_traffic_daily', [
+            'server_id' => $server->id,
+            'peer_name' => '79186873191',
+            'user_id' => $activeUser->id,
+            'rx_bytes_delta' => 0,
+            'tx_bytes_delta' => 0,
+            'total_bytes_delta' => 0,
+        ]);
+
+        $this->assertDatabaseMissing('vpn_peer_traffic_daily', [
+            'server_id' => $server->id,
+            'peer_name' => '70000000000',
+        ]);
+
+        $this->artisan('vpn:traffic-collect --once')->assertExitCode(0);
+
+        $this->assertDatabaseHas('vpn_peer_traffic_daily', [
+            'server_id' => $server->id,
+            'peer_name' => '79186873191',
+            'user_id' => $activeUser->id,
+            'rx_bytes_delta' => 400,
+            'tx_bytes_delta' => 800,
+            'total_bytes_delta' => 1200,
+        ]);
+
+        $this->assertDatabaseMissing('vpn_peer_traffic_daily', [
+            'server_id' => $server->id,
+            'peer_name' => '70000000000',
+        ]);
+
+        $this->assertDatabaseHas('vpn_peer_traffic_snapshots', [
+            'server_id' => $server->id,
+            'peer_name' => '70000000000',
+            'rx_bytes' => 900,
+            'tx_bytes' => 1500,
+        ]);
+    }
+}

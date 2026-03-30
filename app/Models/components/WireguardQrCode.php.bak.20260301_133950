@@ -1,0 +1,35 @@
+<?php
+
+namespace App\Models\components;
+
+use BaconQrCode\Renderer\GDLibRenderer;
+use BaconQrCode\Writer;
+use Throwable;
+
+class WireguardQrCode
+{
+    // 320px is often too small to reliably scan long WireGuard/AWG configs from a phone screen.
+    public static function makePng(string $config, int $size = 520): ?string
+    {
+        if ($config === '' || !extension_loaded('gd')) {
+            return null;
+        }
+
+        try {
+            $writer = new Writer(new GDLibRenderer($size));
+            return $writer->writeString($config);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    public static function makeDataUri(string $config, int $size = 520): ?string
+    {
+        $png = self::makePng($config, $size);
+        if (!$png) {
+            return null;
+        }
+
+        return 'data:image/png;base64,' . base64_encode($png);
+    }
+}
