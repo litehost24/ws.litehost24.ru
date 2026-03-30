@@ -128,13 +128,6 @@
                 <span class="service-block__mode-badge">{{ $vpnAccessModeLabel }}</span>
             @endif
         </div>
-        <div class="service-block__header__right-side">
-            @if ($subInfo->getFileUrl() && !$subInfo->isExpired() && !$subInfo->isAwaitingPayment())
-                <a href="{{ $subInfo->getFileUrl() }}" download class="service-block__download-link" title="Скачать архив с инструкцией и конфигами">
-                    Скачать
-                </a>
-            @endif
-        </div>
         <div class="service-block__status-row">
             @if ($subInfo->isProcessing())
                 <span class="text-orange service-block__status">
@@ -161,6 +154,24 @@
             @endif
         </div>
     </div>
+
+    @if ($subInfo->isConnected() && !$subInfo->isExpired())
+        <div class="service-block__instruction-cta">
+            <div class="service-block__instruction-copy">
+                <div class="service-block__instruction-title">Инструкция</div>
+                <div class="service-block__instruction-text">Пошаговая настройка для Android, ПК и iPhone.</div>
+            </div>
+            <button type="button"
+                    onclick="openInstructionModal({{ $instructionTargetId }})"
+                    class="service-block__action-btn service-block__action-btn--instruction"
+                    title="Открыть инструкцию по подключению">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="service-block__instruction-icon" aria-hidden="true">
+                    <path d="M5 3.75A2.75 2.75 0 0 0 2.25 6.5v7A2.75 2.75 0 0 0 5 16.25h10A2.75 2.75 0 0 0 17.75 13.5v-7A2.75 2.75 0 0 0 15 3.75H5ZM4.75 6.5c0-.138.112-.25.25-.25h10c.138 0 .25.112.25.25v7a.25.25 0 0 1-.25.25H5a.25.25 0 0 1-.25-.25v-7ZM6.5 8a.75.75 0 0 0 0 1.5h7a.75.75 0 0 0 0-1.5h-7Zm0 2.5a.75.75 0 0 0 0 1.5H11a.75.75 0 0 0 0-1.5H6.5Z"/>
+                </svg>
+                <span>Открыть инструкцию</span>
+            </button>
+        </div>
+    @endif
 
     @if (!in_array(Auth::user()->role, ['user', 'admin', 'partner'], true))
         <p class="mt-4 text-gray-500 text-sm leading-relaxed">
@@ -199,17 +210,6 @@
                aria-label="{{ $switchWarningText }}">
                 Переключить на {{ $switchTargetMode === \App\Models\Server::VPN_ACCESS_WHITE_IP ? 'белый IP' : 'обычный IP' }}
             </a>
-        @endif
-
-        @if ($subInfo->isConnected() && !$subInfo->isExpired())
-            <div class="service-block__instruction-wrap">
-                <button type="button"
-                        onclick="openInstructionModal({{ $instructionTargetId }})"
-                        class="service-block__action-btn service-block__action-btn--secondary"
-                        title="Открыть инструкцию по подключению">
-                    Инструкция
-                </button>
-            </div>
         @endif
 
         @if ($subInfo->isConnected() && !$subInfo->isExpired())

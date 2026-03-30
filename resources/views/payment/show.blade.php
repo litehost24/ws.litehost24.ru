@@ -308,32 +308,11 @@
     .service-block .fill-indigo-500 {
         fill: var(--lh-brand-blue, #3088f0) !important;
     }
-    .service-block .service-block__download-link {
-        color: var(--lh-brand-blue, #3088f0) !important;
-    }
-    .service-block .service-block__download-link--instruction {
-        color: #dc2626 !important;
-    }
-    .service-block .service-block__download-link--instruction:hover {
-        color: #b91c1c !important;
-    }
     .service-block__header {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        grid-template-rows: auto auto;
-        column-gap: 10px;
-        row-gap: 4px;
-        align-items: start;
-    }
-    .service-block__header__right-side {
         display: flex;
         flex-direction: column;
-        align-items: flex-end;
         gap: 4px;
-        font-size: 14px;
-        justify-self: end;
-        grid-column: 2;
-        grid-row: 1;
+        align-items: start;
     }
     .service-block__title-row {
         display: flex;
@@ -341,8 +320,6 @@
         gap: 8px;
         flex-wrap: wrap;
         min-width: 0;
-        grid-column: 1;
-        grid-row: 1;
     }
     .service-block__title {
         line-height: 1.2;
@@ -379,8 +356,6 @@
     }
     .service-block__status-row {
         font-size: 14px;
-        grid-column: 1;
-        grid-row: 2;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -395,11 +370,52 @@
         color: #6b7280;
         font-size: 12px;
     }
-    .service-block__instruction-wrap {
+    .service-block__instruction-cta {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin-top: 10px;
+        justify-content: space-between;
+        gap: 14px;
+        width: 100%;
+        margin-top: 14px;
+        padding: 13px 14px;
+        border: 1px solid #bfdbfe;
+        border-radius: 14px;
+        background: linear-gradient(180deg, #f3f8ff 0%, #e6f0ff 100%);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.85);
+    }
+    .service-block__instruction-copy {
+        min-width: 0;
+    }
+    .service-block__instruction-title {
+        color: #1e3a8a;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .service-block__instruction-text {
+        margin-top: 3px;
+        color: #475569;
+        font-size: 12px;
+        line-height: 1.35;
+    }
+    .service-block__action-btn--instruction {
+        height: 40px;
+        padding: 0 16px;
+        border-color: #60a5fa;
+        background: linear-gradient(180deg, #3b94ff 0%, #2479e9 100%);
+        color: #fff !important;
+        box-shadow: 0 8px 18px rgba(36, 121, 233, .18);
+    }
+    .service-block__action-btn--instruction:hover {
+        border-color: #3b82f6;
+        background: linear-gradient(180deg, #2f86f4 0%, #1d69cf 100%);
+        color: #fff !important;
+    }
+    .service-block__instruction-icon {
+        width: 16px;
+        height: 16px;
+        margin-right: 8px;
+        flex: 0 0 auto;
     }
     .service-block__status--traffic {
         margin-left: auto;
@@ -473,10 +489,6 @@
     .service-block__action-icon {
         display: none;
     }
-    .service-block__card.--note-editing .service-block__header__right-side {
-        grid-row: 2;
-        align-self: flex-start;
-    }
     @media (min-width: 601px) {
         .service-block__card.--note-editing .service-block__note {
             flex-direction: row;
@@ -507,29 +519,17 @@
         }
     }
     @media (max-width: 600px) {
-        .service-block__header {
-            grid-template-columns: 1fr;
-            grid-template-rows: auto auto auto;
-        }
-        .service-block__card.--note-editing .service-block__header__right-side {
-            grid-row: 3;
-        }
-        .service-block__header__right-side {
-            width: 100%;
-            align-items: flex-start;
-            justify-self: start;
-            grid-column: 1;
-            grid-row: 3;
-        }
-        .service-block__status-row {
-            grid-row: 2;
-        }
         .service-block__status--traffic {
             margin-left: 0;
             text-align: left;
         }
-        .service-block__title-row {
-            grid-row: 1;
+        .service-block__instruction-cta {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .service-block__action-btn--instruction {
+            width: 100%;
+            justify-content: center;
         }
     }
     .lh-copy-btn {
