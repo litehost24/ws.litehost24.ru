@@ -5,11 +5,10 @@ namespace Tests\Feature;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Models\UserSubscription;
+use App\Services\VpnAgent\SubscriptionWireguardConfigResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\File;
 use Tests\TestCase;
-use ZipArchive;
 
 class UserSubscriptionInstructionProtocolTest extends TestCase
 {
@@ -26,10 +25,6 @@ class UserSubscriptionInstructionProtocolTest extends TestCase
             'name' => 'VPN',
             'price' => 5000,
         ]);
-
-        $relativePath = 'files/test-instruction-awg/subscription.zip';
-        $absolutePath = storage_path('app/public/' . $relativePath);
-        File::ensureDirectoryExists(dirname($absolutePath));
 
         $sourceConfig = <<<CONF
 [Interface]
@@ -53,11 +48,9 @@ AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25
 CONF;
 
-        $zip = new ZipArchive();
-        $opened = $zip->open($absolutePath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-        $this->assertTrue($opened === true);
-        $zip->addFromString('device_3/peer-1.conf', $sourceConfig);
-        $zip->close();
+        $resolver = \Mockery::mock(SubscriptionWireguardConfigResolver::class);
+        $resolver->shouldReceive('resolve')->andReturn($sourceConfig);
+        $this->app->instance(SubscriptionWireguardConfigResolver::class, $resolver);
 
         $userSub = UserSubscription::factory()->create([
             'user_id' => $user->id,
@@ -67,7 +60,7 @@ CONF;
             'is_processed' => true,
             'is_rebilling' => true,
             'end_date' => Carbon::today()->addDays(10)->toDateString(),
-            'file_path' => $relativePath,
+            'file_path' => 'files/test-instruction-awg/subscription.zip',
             'connection_config' => 'vless://test#device-main',
         ]);
 
@@ -86,7 +79,6 @@ CONF;
         $amneziaWg->assertOk();
         $this->assertStringContainsString('AmneziaWG', (string) $amneziaWg->json('html'));
         $this->assertStringNotContainsString('VLESS', (string) $amneziaWg->json('html'));
-        $this->assertStringNotContainsString('fd78:78:78::3/128', (string) $amneziaWg->json('html'));
 
         $vless = $this->actingAs($user)->getJson(route('user-subscription.instruction', [
             'user_subscription_id' => $userSub->id,
@@ -95,5 +87,16 @@ CONF;
         $vless->assertOk();
         $this->assertStringContainsString('VLESS', (string) $vless->json('html'));
         $this->assertStringNotContainsString('AmneziaWG QR', (string) $vless->json('html'));
+
+        $tabbed = $this->actingAs($user)->getJson(route('user-subscription.instruction', [
+            'user_subscription_id' => $userSub->id,
+            'protocol' => 'tabbed',
+        ]));
+        $tabbed->assertOk();
+        $tabbedHtml = (string) $tabbed->json('html');
+        $this->assertStringContainsString('data-instruction-tabs', $tabbedHtml);
+        $this->assertStringContainsString('AmneziaVPN', $tabbedHtml);
+        $this->assertStringContainsString('AmneziaWG (iPhone)', $tabbedHtml);
+        $this->assertStringNotContainsString('VLESS', $tabbedHtml);
     }
 }

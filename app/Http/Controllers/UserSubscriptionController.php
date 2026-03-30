@@ -59,9 +59,10 @@ class UserSubscriptionController extends Controller
         $amneziaWgConfig = $wireguardConfig;
         $protocol = (string) $request->get('protocol', 'amnezia_vpn');
 
-        $html = view('subscription.manual', [
+        $manualData = [
             'protocol' => $protocol,
             'id' => (int) ($userSub->subscription_id ?? 0),
+            'manualUid' => 'instruction-tabs-' . (int) $userSub->id,
             'vlessUrl' => (string) ($userSub->connection_config ?? ''),
             'wireguardQrDataUri' => $wireguardConfig !== '' ? WireguardQrCode::makeDataUri($wireguardConfig) : null,
             'awgQrDataUri' => $amneziaWgConfig !== '' ? WireguardQrCode::makePlainDataUri($amneziaWgConfig) : null,
@@ -74,7 +75,13 @@ class UserSubscriptionController extends Controller
                 'user_subscription_id' => (int) $userSub->id,
             ]),
             'fileUrl' => $subInfo->getFileUrl(),
-        ])->render();
+        ];
+
+        $view = $protocol === 'tabbed'
+            ? 'subscription.manual_tabbed'
+            : 'subscription.manual';
+
+        $html = view($view, $manualData)->render();
 
         return response()->json(['ok' => true, 'html' => $html], 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
     }

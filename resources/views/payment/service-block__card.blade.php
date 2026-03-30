@@ -20,22 +20,10 @@
     $switchTargetLabel = $switchTargetMode ? (\App\Models\Server::vpnAccessModeOptions()[$switchTargetMode] ?? null) : null;
     $canSwitchVpnAccessMode = $userSub?->canSwitchVpnAccessMode() ?? false;
     $switchWarningText = 'После переключения старый AmneziaWG-конфиг перестанет работать. VLESS не изменится. Нужно будет скачать и загрузить новый AmneziaWG-конфиг.';
-    $amneziaVpnInstructionUrl = $userSub
+    $instructionUrl = $userSub
         ? route('user-subscription.instruction', [
             'user_subscription_id' => (int) $userSub->id,
-            'protocol' => 'amnezia_vpn',
-        ])
-        : '';
-    $amneziaWgInstructionUrl = $userSub
-        ? route('user-subscription.instruction', [
-            'user_subscription_id' => (int) $userSub->id,
-            'protocol' => 'amneziawg',
-        ])
-        : '';
-    $vlessInstructionUrl = $userSub
-        ? route('user-subscription.instruction', [
-            'user_subscription_id' => (int) $userSub->id,
-            'protocol' => 'vless',
+            'protocol' => 'tabbed',
         ])
         : '';
 @endphp
@@ -213,40 +201,18 @@
             </a>
         @endif
 
-        @if ($subInfo->isConnected() && !$subInfo->isExpired() && $subInfo->getConnectionConfig())
-            <div class="service-block__protocol-links">
-                <span class="service-block__protocol-links-label">Инструкция:</span>
+        @if ($subInfo->isConnected() && !$subInfo->isExpired())
+            <div class="service-block__instruction-wrap">
                 <button type="button"
-                        onclick="openInstructionModal({{ $instructionTargetId }}, '{{ $amneziaVpnInstructionUrl }}')"
-                        class="service-block__protocol-link service-block__protocol-link--primary"
-                        title="Открыть инструкцию для AmneziaVPN (Android)">
-                    AmneziaVPN (Android)
-                </button>
-                <button type="button"
-                        onclick="openInstructionModal({{ $instructionTargetId }}, '{{ $amneziaWgInstructionUrl }}')"
-                        class="service-block__protocol-link service-block__protocol-link--muted"
-                        title="Открыть инструкцию для AmneziaWG (iPhone)">
-                    AmneziaWG (iPhone)
-                </button>
-                <button type="button"
-                        onclick="openInstructionModal({{ $instructionTargetId }}, '{{ $vlessInstructionUrl }}')"
-                        class="service-block__protocol-link service-block__protocol-link--muted"
-                        title="Открыть инструкцию для VLESS">
-                    VLESS
+                        onclick="openInstructionModal({{ $instructionTargetId }})"
+                        class="service-block__action-btn service-block__action-btn--secondary"
+                        title="Открыть инструкцию по подключению">
+                    Инструкция
                 </button>
             </div>
         @endif
 
-        @if ($subInfo->isConnected() && !$subInfo->isExpired() && $subInfo->getConnectionConfig())
-            @php
-                $instructionUrl = '';
-                if (!empty($userSub?->id)) {
-                    $instructionUrl = route('user-subscription.instruction', [
-                        'user_subscription_id' => (int) $userSub->id,
-                        'protocol' => 'amnezia_vpn',
-                    ]);
-                }
-            @endphp
+        @if ($subInfo->isConnected() && !$subInfo->isExpired())
             <div id="instruction-modal-{{ $instructionTargetId }}" class="fixed inset-0 z-[9999] hidden overflow-y-auto" data-instruction-url="{{ $instructionUrl }}" data-instruction-loaded="0">
                 <div class="absolute inset-0 bg-black/50" onclick="closeInstructionModal({{ $instructionTargetId }})"></div>
                 <div class="relative instruction-modal-dialog rounded-lg bg-white p-6 shadow-lg instruction-modal-content">

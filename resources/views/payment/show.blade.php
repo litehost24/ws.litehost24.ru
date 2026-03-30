@@ -395,49 +395,77 @@
         color: #6b7280;
         font-size: 12px;
     }
-    .service-block__protocol-links {
+    .service-block__instruction-wrap {
         display: flex;
         align-items: center;
-        flex-wrap: wrap;
         gap: 8px;
-        width: 100%;
         margin-top: 10px;
-    }
-    .service-block__protocol-links-label {
-        color: #6b7280;
-        font-size: 12px;
-        font-weight: 600;
-    }
-    .service-block__protocol-link {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 30px;
-        padding: 0 10px;
-        border-radius: 9999px;
-        border: 1px solid #d1d5db;
-        background: #fff;
-        color: #374151 !important;
-        font-size: 12px;
-        font-weight: 600;
-        line-height: 1;
-        text-decoration: none !important;
-        cursor: pointer;
-        transition: background-color .15s ease, border-color .15s ease, color .15s ease;
-    }
-    .service-block__protocol-link:hover {
-        border-color: #93c5fd;
-        background: #eff6ff;
-        color: #1d4ed8 !important;
-    }
-    .service-block__protocol-link--primary {
-        border-color: #bfdbfe;
-        background: #eff6ff;
-        color: #1d4ed8 !important;
     }
     .service-block__status--traffic {
         margin-left: auto;
         text-align: right;
+    }
+    .instruction-tabs {
+        margin: 0 0 18px;
+    }
+    .instruction-tabs__bar {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        padding: 0 8px;
+        border-bottom: 1px solid #b8bec8;
+        background: linear-gradient(to bottom, #eef1f5 0%, #dde3ea 100%);
+        border-radius: 8px 8px 0 0;
+    }
+    .instruction-tabs__tab {
+        position: relative;
+        top: 1px;
+        appearance: none;
+        border: 1px solid #b8bec8;
+        border-bottom-color: #9aa3af;
+        border-radius: 8px 8px 0 0;
+        background: linear-gradient(to bottom, #f3f4f6 0%, #d7dce3 100%);
+        color: #374151;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.2;
+        padding: 9px 16px 8px;
+        cursor: pointer;
+        transition: background-color .15s ease, color .15s ease;
+    }
+    .instruction-tabs__tab:hover {
+        background: linear-gradient(to bottom, #f9fafb 0%, #e5e7eb 100%);
+    }
+    .instruction-tabs__tab.is-active {
+        background: #fff;
+        color: #111827;
+        border-bottom-color: #fff;
+        z-index: 1;
+    }
+    .instruction-tabs__panel {
+        border: 1px solid #b8bec8;
+        border-top: none;
+        border-radius: 0 0 10px 10px;
+        background: #fff;
+        padding: 18px 18px 0;
+    }
+    .instruction-tabs__extra {
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid #e5e7eb;
+    }
+    @media (max-width: 640px) {
+        .instruction-tabs__bar {
+            padding: 0 6px;
+            overflow-x: auto;
+        }
+        .instruction-tabs__tab {
+            white-space: nowrap;
+            padding: 9px 12px 8px;
+        }
+        .instruction-tabs__panel {
+            padding: 16px 14px 0;
+        }
     }
     .service-block__action-arrow {
         margin-left: 4px;
@@ -1102,6 +1130,34 @@
 
         attachNoteForms(document);
         attachSubActionLinks(document);
+    });
+
+    document.addEventListener('click', function (event) {
+        const tab = event.target.closest('[data-instruction-tab]');
+        if (!tab) {
+            return;
+        }
+
+        const root = tab.closest('[data-instruction-tabs]');
+        const target = tab.getAttribute('data-instruction-tab');
+        const tabsTarget = tab.getAttribute('data-tabs-target');
+        if (!root || !target || !tabsTarget) {
+            return;
+        }
+
+        root.querySelectorAll('[data-instruction-tab]').forEach(function (item) {
+            const isActive = item === tab;
+            item.classList.toggle('is-active', isActive);
+            item.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            item.setAttribute('tabindex', isActive ? '0' : '-1');
+        });
+
+        root.querySelectorAll('[data-instruction-panel]').forEach(function (panel) {
+            const isActive = panel.getAttribute('data-instruction-panel') === target
+                && panel.getAttribute('data-tabs-target') === tabsTarget;
+            panel.classList.toggle('is-active', isActive);
+            panel.hidden = !isActive;
+        });
     });
 </script>
 <div id="page-toast-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:9998;" onclick="hideToast()"></div>
