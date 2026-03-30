@@ -427,8 +427,7 @@ class TelegramBotService
             $userSubId = (int) ($result['user_subscription_id'] ?? 0);
             $keyboard = $this->buildInstructionKeyboard(
                 $userSubId,
-                $userSubId > 0,
-                !empty($result['connection_config'])
+                $userSubId > 0
             );
             if ($keyboard !== null) {
                 $lines[] = "";
@@ -917,8 +916,7 @@ class TelegramBotService
 
         $keyboard = $this->buildInstructionKeyboard(
             (int) $row->id,
-            $wireguardConfig !== '',
-            !empty($row->connection_config)
+            $wireguardConfig !== ''
         );
         if ($keyboard !== null) {
             $baseLines[] = "Инструкции по подключению:";
@@ -932,7 +930,7 @@ class TelegramBotService
         $this->api->sendMessage($chatId, implode("\n", $baseLines), $options);
     }
 
-    private function buildInstructionKeyboard(int $userSubscriptionId, bool $hasAmneziaInstructions, bool $hasVlessInstruction): ?array
+    private function buildInstructionKeyboard(int $userSubscriptionId, bool $hasAmneziaInstructions): ?array
     {
         if ($userSubscriptionId <= 0) {
             return null;
@@ -958,16 +956,6 @@ class TelegramBotService
                     ]),
                 ],
             ];
-        }
-
-        if ($hasVlessInstruction) {
-            $rows[] = [[
-                'text' => 'VLESS',
-                'url' => URL::temporarySignedRoute('telegram.instruction.open', $expiresAt, [
-                    'user_subscription_id' => $userSubscriptionId,
-                    'protocol' => 'vless',
-                ]),
-            ]];
         }
 
         if (empty($rows)) {

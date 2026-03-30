@@ -63,7 +63,6 @@ class UserSubscriptionController extends Controller
             'protocol' => $protocol,
             'id' => (int) ($userSub->subscription_id ?? 0),
             'manualUid' => 'instruction-tabs-' . (int) $userSub->id,
-            'vlessUrl' => (string) ($userSub->connection_config ?? ''),
             'wireguardQrDataUri' => $wireguardConfig !== '' ? WireguardQrCode::makeDataUri($wireguardConfig) : null,
             'awgQrDataUri' => $amneziaWgConfig !== '' ? WireguardQrCode::makePlainDataUri($amneziaWgConfig) : null,
             'wireguardConfig' => $wireguardConfig,
@@ -645,7 +644,6 @@ class UserSubscriptionController extends Controller
         }
 
         $displayUserSub->traffic_total_bytes = $displayUserSub->traffic_total_bytes ?? null;
-        $displayUserSub->traffic_total_bytes_vless = $displayUserSub->traffic_total_bytes_vless ?? null;
 
         return view('payment.service-block__card', [
             'sub' => $displayUserSub->subscription,

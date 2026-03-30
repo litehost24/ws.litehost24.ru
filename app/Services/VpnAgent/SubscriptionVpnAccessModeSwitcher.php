@@ -6,8 +6,6 @@ use App\Models\Server;
 use App\Models\UserSubscription;
 use App\Models\components\InboundManagerVless;
 use App\Models\components\SubscriptionPackageBuilder;
-use App\Models\components\UserManagerVless;
-use App\Services\Vless\UserStatusManager;
 use App\Support\VpnPeerName;
 use Exception;
 use Illuminate\Support\Carbon;
@@ -59,7 +57,6 @@ class SubscriptionVpnAccessModeSwitcher
 
         $subscription->update([
             'file_path' => $package['file_path'],
-            'connection_config' => $package['vless_url'],
             'server_id' => (int) $targetServer->id,
             'vpn_access_mode' => $targetMode,
             'pending_vpn_access_mode_source_server_id' => null,
@@ -117,7 +114,6 @@ class SubscriptionVpnAccessModeSwitcher
         try {
             $subscription->update([
                 'file_path' => $package['file_path'],
-                'connection_config' => $package['vless_url'],
                 'server_id' => (int) $targetServer->id,
                 'vpn_access_mode' => $targetMode,
                 'pending_vpn_access_mode_source_server_id' => $sourceServerId,
@@ -183,8 +179,6 @@ class SubscriptionVpnAccessModeSwitcher
         if ($targetServer->usesNode1Api()) {
             (new Node1Provisioner())->enableByName($targetServer, $peerName);
         }
-
-        (new UserStatusManager())->enable($targetServer, $peerName);
     }
 
     /**
@@ -217,23 +211,6 @@ class SubscriptionVpnAccessModeSwitcher
             }
         }
 
-        if ($this->sharesSameVlessNode($currentServer, $targetServer)) {
-            return;
-        }
-
-        if (
-            trim((string) $currentServer->url2) === ''
-            || trim((string) $currentServer->username2) === ''
-            || trim((string) $currentServer->password2) === ''
-        ) {
-            return;
-        }
-
-        $userManager = new UserManagerVless((string) $currentServer->url2);
-        $result = $userManager->disableUser($peerName, (string) $currentServer->username2, (string) $currentServer->password2);
-        if (!$this->isSuccess($result)) {
-            throw new Exception('Не удалось отключить старого VLESS пользователя.');
-        }
     }
 
     private function rollbackTarget(Server $targetServer, string $peerName): void
@@ -261,12 +238,6 @@ class SubscriptionVpnAccessModeSwitcher
             'pending_vpn_access_mode_disconnect_at' => null,
             'pending_vpn_access_mode_error' => null,
         ];
-    }
-
-    private function sharesSameVlessNode(Server $source, Server $target): bool
-    {
-        return trim((string) $source->url2) === trim((string) $target->url2)
-            && trim((string) $source->username2) === trim((string) $target->username2);
     }
 
     private function isSuccess($result): bool

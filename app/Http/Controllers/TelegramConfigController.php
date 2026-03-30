@@ -29,13 +29,11 @@ class TelegramConfigController extends Controller
         $userSub = UserSubscription::query()->findOrFail((int) $data['user_subscription_id']);
         $config = $this->configResolver->resolve($userSub);
         $amneziaWgConfig = $config;
-        $vlessUrl = (string) ($userSub->connection_config ?? '');
         $fileUrl = $this->resolveArchiveUrl((string) ($userSub->file_path ?? ''));
 
         return view('telegram.subscription-manual', [
             'protocol' => array_key_exists('protocol', $data) ? (string) $data['protocol'] : '',
             'id' => (int) $userSub->id,
-            'vlessUrl' => $vlessUrl,
             'wireguardQrDataUri' => !empty($config) ? WireguardQrCode::makeDataUri($config) : null,
             'awgQrDataUri' => !empty($amneziaWgConfig) ? WireguardQrCode::makePlainDataUri($amneziaWgConfig) : null,
             'wireguardConfig' => $config ?? '',

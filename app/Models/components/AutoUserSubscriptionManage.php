@@ -237,21 +237,6 @@ class AutoUserSubscriptionManage
                         }
                     }
 
-                    $userManager = new UserManagerVless($server->url2);
-                    try {
-                        $result = $userManager->disableUser($parts[1], $server->username2, $server->password2);
-                        if (!$this->isSuccess($result)) {
-                            $actionOk = false;
-                            $actionMessages[] = "user.disable.error(email={$parts[1]}): unsuccessful response";
-                            $this->notifyAdmin("?? ??????? ????????? ???????????? (await payment). user_id={$userSub->user_id}, sub_id={$userSub->subscription_id}, server_id={$server->id}, email={$parts[1]}");
-                        } else {
-                            $actionMessages[] = "user.disable.ok(email={$parts[1]})";
-                        }
-                    } catch (\Exception $e) {
-                        $actionOk = false;
-                        $actionMessages[] = "user.disable.error(email={$parts[1]}): {$e->getMessage()}";
-                        $this->notifyAdmin("?????? ?????????? ???????????? (await payment). user_id={$userSub->user_id}, sub_id={$userSub->subscription_id}, server_id={$server->id}, email={$parts[1]}. {$e->getMessage()}");
-                    }
                 } else {
                     $actionOk = false;
                     $actionMessages[] = "server.not_found(id={$parts[2]})";
@@ -337,16 +322,6 @@ class AutoUserSubscriptionManage
                         } catch (\Exception $e) {
                             $this->notifyAdmin("?????? ????????? inbound (activation). user_id={$awaitSub->user_id}, sub_id={$awaitSub->subscription_id}, server_id={$server->id}, remark={$parts[1]}. {$e->getMessage()}");
                         }
-                    }
-
-                    $userManager = new UserManagerVless($server->url2);
-                    try {
-                        $result = $userManager->enableUser($parts[1], $server->username2, $server->password2);
-                        if (!$this->isSuccess($result)) {
-                            $this->notifyAdmin("?? ??????? ???????? ???????????? (activation). user_id={$awaitSub->user_id}, sub_id={$awaitSub->subscription_id}, server_id={$server->id}, email={$parts[1]}");
-                        }
-                    } catch (\Exception $e) {
-                        $this->notifyAdmin("?????? ????????? ???????????? (activation). user_id={$awaitSub->user_id}, sub_id={$awaitSub->subscription_id}, server_id={$server->id}, email={$parts[1]}. {$e->getMessage()}");
                     }
                 }
             }
@@ -581,18 +556,6 @@ class AutoUserSubscriptionManage
                             $actionOk = false;
                             $actionErrors[] = "?????? ?????????? inbound: {$e->getMessage()}";
                         }
-                    }
-
-                    $userManager = new UserManagerVless($server->url2);
-                    try {
-                        $result = $userManager->disableUser($parts[1], $server->username2, $server->password2);
-                        if (!$this->isSuccess($result)) {
-                            $actionOk = false;
-                            $actionErrors[] = "?? ??????? ????????? ????????????";
-                        }
-                    } catch (\Exception $e) {
-                        $actionOk = false;
-                        $actionErrors[] = "?????? ?????????? ????????????: {$e->getMessage()}";
                     }
                 } else {
                     $actionOk = false;

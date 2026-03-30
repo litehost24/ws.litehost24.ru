@@ -3,7 +3,6 @@
     $awgQrDataUri = (string) ($awgQrDataUri ?? '');
     $appBaseUrl = rtrim((string) config('app.url'), '/');
     $amneziaInstallerUrl = $appBaseUrl . '/storage/files/AmneziaVPN_4.8.14.5_x64.exe';
-    $happInstallerUrl = $appBaseUrl . '/storage/files/setup-Happ.x64.exe';
 @endphp
 
 <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #111827; padding-bottom: 48px;">
@@ -65,30 +64,6 @@
             <li>Откройте Amnezia VPN и импортируйте файл <code>peer-1.conf</code>.</li>
             <li>Активируйте подключение.</li>
         </ol>
-    </div>
-
-    <h3 style="margin: 6px 0 12px; font-size: 20px; font-weight: 800; color: #0f172a;">6. Как резервный вариант, если не работает Amnezia VPN</h3>
-    <div style="margin-bottom: 10px;">
-        <div style="font-weight: 600;">Протокол VLESS — Windows</div>
-        <ol style="margin: 6px 0 0 18px; padding: 0;">
-            <li>Скачайте программу <a href="{{ $happInstallerUrl }}">{{ $happInstallerUrl }}</a>.</li>
-            <li>Скопируйте конфигурационные строки ниже.</li>
-            <li>Импортируйте настройки в приложении.</li>
-        </ol>
-    </div>
-    <div style="margin-bottom: 16px;">
-        <div style="font-weight: 600;">Протокол VLESS — Android</div>
-        <ol style="margin: 6px 0 0 18px; padding: 0;">
-            <li>Установите приложение <strong>v2rayTun</strong> из Google Play Market.</li>
-            <li>Скопируйте конфигурационные строки ниже.</li>
-            <li>Импортируйте настройки в приложении.</li>
-        </ol>
-    </div>
-
-    <div style="margin: 0 0 8px; font-weight: 600;">VLESS конфигурация</div>
-    <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom: 16px;">
-        <textarea id="lh-vless" readonly rows="3" style="flex:1; padding: 10px 12px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;">{{ $vlessUrl }}</textarea>
-        <button type="button" onclick="lhCopy('lh-vless')" style="white-space:nowrap; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; border-radius: 6px; font-weight: 600; cursor: pointer;">Копировать</button>
     </div>
 
 </div>

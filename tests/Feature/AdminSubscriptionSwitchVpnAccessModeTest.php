@@ -74,7 +74,7 @@ class AdminSubscriptionSwitchVpnAccessModeTest extends TestCase
         ]);
 
         $response->assertRedirect();
-        $response->assertSessionHas('subscription-success', 'Тип подключения подписки изменён. Старый AmneziaWG-конфиг перестанет работать, VLESS не изменится.');
+        $response->assertSessionHas('subscription-success', 'Тип подключения подписки изменён. Старый AmneziaWG-конфиг перестанет работать. Пользователю нужно будет скачать новый AmneziaWG-конфиг.');
 
         $this->assertSame(1, UserSubscription::query()->count());
 

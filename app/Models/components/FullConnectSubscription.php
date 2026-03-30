@@ -4,7 +4,6 @@ namespace App\Models\components;
 
 use App\Mail\ForAdminMail;
 use App\Mail\ForUserMail;
-use App\Models\components\UserManagerVless;
 use App\Models\components\SubscriptionPackageBuilder;
 use App\Models\Subscription;
 use App\Models\UserSubscription;
@@ -17,7 +16,6 @@ use Psr\Container\NotFoundExceptionInterface;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Server;
 use App\Services\VpnAgent\Node1Provisioner;
-//use App\Models\components\UserManagerVless;
 use App\Models\components\InboundManagerVless;
 use Exception;
 
@@ -60,7 +58,7 @@ class FullConnectSubscription
                 'file_path' => 'files/test.zip',
                 'is_rebilling' => true,
                 'end_date' => UserSubscription::nextMonthlyEndDate(Carbon::today()->toDateString()),
-                'connection_config' => 'vless://test#' . (string) Auth::user()->email,
+                'connection_config' => null,
                 'server_id' => $resolvedServer?->id,
                 'vpn_access_mode' => $resolvedMode,
                 'note' => $this->note,
@@ -93,7 +91,7 @@ class FullConnectSubscription
             'file_path' => $package['file_path'],
             'is_rebilling' => true,
             'end_date' => UserSubscription::nextMonthlyEndDate(Carbon::today()->toDateString()),
-            'connection_config' => $package['vless_url'],
+            'connection_config' => null,
             'server_id' => $server->id,
             'vpn_access_mode' => $server->getVpnAccessMode(),
             'note' => $this->note,
@@ -138,7 +136,7 @@ class FullConnectSubscription
                 'is_rebilling' => true,
                 'end_date' => UserSubscription::nextMonthlyEndDate($prevUserSub?->end_date),
                 'file_path' => $prevUserSub ? $prevUserSub->file_path : 'files/test.zip',
-                'connection_config' => $prevUserSub?->connection_config ?? ('vless://test#' . (string) Auth::user()->email),
+                'connection_config' => $prevUserSub?->connection_config ?? null,
                 'server_id' => $prevUserSub?->server_id,
                 'vpn_access_mode' => $prevUserSub?->vpn_access_mode,
                 'note' => $prevUserSub?->note ?? $this->note,
@@ -207,19 +205,6 @@ class FullConnectSubscription
                             $this->notifyAdmin("Ошибка включения inbound (manual activation). user_id=" . Auth::user()->id . ", sub_id={$this->sub->id}, server_id={$server->id}, remark={$parts[1]}. {$e->getMessage()}");
                         }
                     }
-
-                    $userManager = new UserManagerVless($server->url2);
-                    try {
-                        $result = $userManager->enableUser($parts[1], $server->username2, $server->password2);
-                        if (!$this->isSuccess($result)) {
-                            $this->notifyAdmin("Не удалось включить пользователя (manual activation). user_id=" . Auth::user()->id . ", sub_id={$this->sub->id}, server_id={$server->id}, email={$parts[1]}");
-                        }
-                    } catch (\Exception $e) {
-                        $this->notifyAdmin("Ошибка включения пользователя (manual activation). user_id=" . Auth::user()->id . ", sub_id={$this->sub->id}, server_id={$server->id}, email={$parts[1]}. {$e->getMessage()}");
-                    }
-
-
-
                 }
             }
         } else {

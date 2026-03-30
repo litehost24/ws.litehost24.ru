@@ -23,7 +23,7 @@ class TelegramBotSubscriptionInstructionsTest extends TestCase
         $this->postJson('/api/telegram/webhook/secret', $payload)->assertOk();
     }
 
-    public function test_bot_sends_three_instruction_buttons_on_subscription_card_in_list(): void
+    public function test_bot_sends_two_instruction_buttons_on_subscription_card_in_list(): void
     {
         Http::fake([
             'https://api.telegram.org/*' => Http::response(['ok' => true, 'result' => []], 200),
@@ -118,13 +118,11 @@ CONF);
             $texts = $buttons->pluck('text')->all();
             $urls = $buttons->pluck('url')->filter()->all();
 
-            return count($buttons) === 3
+            return count($buttons) === 2
                 && in_array('AmneziaVPN (Android)', $texts, true)
                 && in_array('AmneziaWG (iPhone)', $texts, true)
-                && in_array('VLESS', $texts, true)
                 && collect($urls)->contains(fn ($url) => str_contains((string) $url, '/telegram/config/instruction') && str_contains((string) $url, 'user_subscription_id=' . $userSub->id) && str_contains((string) $url, 'protocol=amnezia_vpn'))
-                && collect($urls)->contains(fn ($url) => str_contains((string) $url, '/telegram/config/instruction') && str_contains((string) $url, 'user_subscription_id=' . $userSub->id) && str_contains((string) $url, 'protocol=amneziawg'))
-                && collect($urls)->contains(fn ($url) => str_contains((string) $url, '/telegram/config/instruction') && str_contains((string) $url, 'user_subscription_id=' . $userSub->id) && str_contains((string) $url, 'protocol=vless'));
+                && collect($urls)->contains(fn ($url) => str_contains((string) $url, '/telegram/config/instruction') && str_contains((string) $url, 'user_subscription_id=' . $userSub->id) && str_contains((string) $url, 'protocol=amneziawg'));
         });
 
         Http::assertNotSent(function (Request $request) {

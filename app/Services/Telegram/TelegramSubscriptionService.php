@@ -42,7 +42,7 @@ class TelegramSubscriptionService
     }
 
     /**
-     * @return array{ok: bool, message?: string, balance_rub?: int, end_date?: string, connection_config?: string, file_url?: string, file_path?: string, user_subscription_id?: int}
+     * @return array{ok: bool, message?: string, balance_rub?: int, end_date?: string, file_url?: string, file_path?: string, user_subscription_id?: int}
      */
     public function buyVpn(User $user, ?string $note = null): array
     {
@@ -86,7 +86,6 @@ class TelegramSubscriptionService
                 'ok' => true,
                 'balance_rub' => (int) (new Balance)->getBalanceRub($user->id),
                 'end_date' => $row?->end_date ? (string) $row->end_date : null,
-                'connection_config' => $row?->connection_config ? (string) $row->connection_config : null,
                 'file_url' => $fileUrl,
                 'file_path' => $filePath !== '' ? $filePath : null,
                 'user_subscription_id' => $row?->id ? (int) $row->id : null,

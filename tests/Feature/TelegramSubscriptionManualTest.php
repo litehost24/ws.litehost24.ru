@@ -68,6 +68,6 @@ CONF;
         $response->assertSee('AmneziaWG', false);
         $response->assertSee('instruction-awg-config-1', false);
         $response->assertSee('instruction-amneziawg-config-1', false);
-        $response->assertSee('VLESS', false);
+        $response->assertDontSee('VLESS', false);
     }
 }

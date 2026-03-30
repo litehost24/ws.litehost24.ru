@@ -38,22 +38,18 @@ class SubscriptionPackageBuilder
             return [
                 'file_path' => $this->fakeFilePath((string) ($this->user->email ?? 'test@example.invalid')),
                 'email' => (string) ($this->user->email ?? 'test@example.invalid'),
-                'vless_url' => 'vless://test#' . (string) ($this->user->email ?? 'test@example.invalid'),
+                'vless_url' => '',
                 'wireguard_config' => '',
             ];
         }
 
         $server = $this->server;
 
-        if (empty($server->url2)) {
-            throw new Exception('Server node2 URL is not configured');
-        }
         if (!$server->usesNode1Api() && empty($server->url1)) {
             throw new Exception('Server node1 URL is not configured');
         }
 
-        $userManager = new UserManagerVless($server->url2);
-        $email = $userManager->getNextNumericEmailForServer($server->username2, $server->password2, (int) $server->id);
+        $email = $this->generatePeerName();
 
         return $this->buildForEmail($email);
     }
@@ -69,21 +65,16 @@ class SubscriptionPackageBuilder
             return [
                 'file_path' => $this->fakeFilePath($email),
                 'email' => $email,
-                'vless_url' => 'vless://test#' . $email,
+                'vless_url' => '',
                 'wireguard_config' => '',
             ];
         }
 
         $server = $this->server;
 
-        if (empty($server->url2)) {
-            throw new Exception('Server node2 URL is not configured');
-        }
         if (!$server->usesNode1Api() && empty($server->url1)) {
             throw new Exception('Server node1 URL is not configured');
         }
-
-        $userManager = new UserManagerVless($server->url2);
 
         $wireguardConfig = null;
         if ($server->usesNode1Api()) {
@@ -109,36 +100,24 @@ class SubscriptionPackageBuilder
             $wireguardConfig = WireguardQrCode::normalizeConfig($wireguardConfig);
         }
 
-        $vlessInboundId = $server->vless_inbound_id ?: null;
-        $vlessUrl = $userManager->getUserConnectionUrlByEmail($email, $server->username2, $server->password2);
-        if (!$vlessUrl) {
-            $vless = $userManager->addUser($vlessInboundId, $email, $server->username2, $server->password2);
-            $vlessUrl = $vless['connection_url'] ?? null;
-        }
-        if (!$vlessUrl) {
-            throw new Exception('VLESS connection URL not created');
-        }
-
-        $vlessUrlForManual = $this->normalizeVlessUrl($vlessUrl, $email);
         $amneziaWgConfig = $wireguardConfig ?: '';
         $wireguardQrDataUri = $wireguardConfig ? WireguardQrCode::makeDataUri($wireguardConfig) : null;
         $awgQrDataUri = $amneziaWgConfig !== '' ? WireguardQrCode::makePlainDataUri($amneziaWgConfig) : null;
-        $manualHtml = $this->buildManualHtml($vlessUrlForManual, $wireguardQrDataUri, $awgQrDataUri, $wireguardConfig);
+        $manualHtml = $this->buildManualHtml($wireguardQrDataUri, $awgQrDataUri, $wireguardConfig);
 
         $zipRelativePath = $this->buildArchive($email, $manualHtml, $wireguardConfig, $amneziaWgConfig, $datePart);
 
         return [
             'file_path' => $zipRelativePath,
             'email' => $email,
-            'vless_url' => $vlessUrlForManual,
+            'vless_url' => '',
             'wireguard_config' => $wireguardConfig,
         ];
     }
 
-    private function buildManualHtml(string $vlessUrl, ?string $wireguardQrDataUri = null, ?string $awgQrDataUri = null, ?string $wireguardConfig = null): string
+    private function buildManualHtml(?string $wireguardQrDataUri = null, ?string $awgQrDataUri = null, ?string $wireguardConfig = null): string
     {
         $body = view('subscription.manual_zip', [
-            'vlessUrl' => $vlessUrl,
             'wireguardQrDataUri' => $wireguardQrDataUri,
             'awgQrDataUri' => $awgQrDataUri,
             'wireguardConfig' => $wireguardConfig,
@@ -274,6 +253,16 @@ class SubscriptionPackageBuilder
             $safeEmail,
             (int) ($this->server->id ?? 0),
             Carbon::now()->format('d_m_Y_H_i')
+        );
+    }
+
+    private function generatePeerName(): string
+    {
+        return sprintf(
+            'vpn-%d-%d-%s',
+            (int) ($this->server->id ?? 0),
+            (int) ($this->user->id ?? 0),
+            Carbon::now()->format('ymdHisv')
         );
     }
 }

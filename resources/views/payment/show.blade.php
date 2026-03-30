@@ -71,12 +71,6 @@
                         {!! session('subscription-success')  !!}
                     </div>
                 @endif
-                @if (!empty($vlessBlockedUntil))
-                    <div class="alert-under-balance --error">
-                        VLESS временно отключен на 1 час из‑за одновременного использования двух протоколов.
-                        Восстановление: {{ $vlessBlockedUntil->timezone('Europe/Moscow')->format('d.m.Y H:i') }} (МСК)
-                    </div>
-                @endif
                 @if (session('subscription-error'))
                     <div class="alert-under-balance --error">
                         {!! session('subscription-error')  !!}

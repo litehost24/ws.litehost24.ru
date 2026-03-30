@@ -15,7 +15,6 @@ use App\Models\VpnPeerServerState;
 use App\Models\VpnPeerTrafficDaily;
 use App\Models\VpnPeerTrafficSnapshot;
 use App\Models\components\InboundManagerVless;
-use App\Models\components\UserManagerVless;
 use App\Services\VpnEndpointNetworkResolver;
 use App\Services\VpnAgent\Node1Provisioner;
 use App\Services\VpnAgent\SubscriptionVpnAccessModeSwitcher;
@@ -732,7 +731,7 @@ class AdminSubscriptionController extends Controller
             return redirect()->back()->with('subscription-error', 'Не удалось сменить тип подключения: ' . $e->getMessage());
         }
 
-        return redirect()->back()->with('subscription-success', 'Тип подключения подписки изменён. Старый AmneziaWG-конфиг перестанет работать, VLESS не изменится.');
+        return redirect()->back()->with('subscription-success', 'Тип подключения подписки изменён. Старый AmneziaWG-конфиг перестанет работать. Пользователю нужно будет скачать новый AmneziaWG-конфиг.');
     }
 
     private function isSubscriptionActive(
@@ -805,16 +804,6 @@ class AdminSubscriptionController extends Controller
             } catch (\Throwable $e) {
                 return [false, 'Ошибка отключения inbound: ' . $e->getMessage()];
             }
-        }
-
-        $userManager = new UserManagerVless($server->url2);
-        try {
-            $result = $userManager->disableUser($peerName, $server->username2, $server->password2);
-            if (!$this->isSuccess($result)) {
-                return [false, 'Не удалось отключить пользователя'];
-            }
-        } catch (\Throwable $e) {
-            return [false, 'Ошибка отключения пользователя: ' . $e->getMessage()];
         }
 
         return [true, null];

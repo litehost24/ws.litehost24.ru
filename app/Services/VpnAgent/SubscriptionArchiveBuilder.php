@@ -27,7 +27,6 @@ class SubscriptionArchiveBuilder
         $downloadName = $this->normalizeDownloadName($subscription, $downloadName);
         $folderName = $this->deriveFolderName($subscription);
         $manualHtml = $this->buildManualHtml(
-            (string) ($subscription->connection_config ?? ''),
             $wireguardConfig,
             $amneziaWgConfig,
         );
@@ -75,10 +74,9 @@ class SubscriptionArchiveBuilder
         return $zipPath;
     }
 
-    private function buildManualHtml(string $vlessUrl, string $wireguardConfig, string $amneziaWgConfig): string
+    private function buildManualHtml(string $wireguardConfig, string $amneziaWgConfig): string
     {
         $body = View::make('subscription.manual_zip', [
-            'vlessUrl' => $vlessUrl,
             'wireguardQrDataUri' => WireguardQrCode::makeDataUri($wireguardConfig),
             'awgQrDataUri' => $amneziaWgConfig !== '' ? WireguardQrCode::makePlainDataUri($amneziaWgConfig) : null,
             'wireguardConfig' => $wireguardConfig,

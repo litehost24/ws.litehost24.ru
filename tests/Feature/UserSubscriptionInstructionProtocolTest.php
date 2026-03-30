@@ -80,13 +80,14 @@ CONF;
         $this->assertStringContainsString('AmneziaWG', (string) $amneziaWg->json('html'));
         $this->assertStringNotContainsString('VLESS', (string) $amneziaWg->json('html'));
 
-        $vless = $this->actingAs($user)->getJson(route('user-subscription.instruction', [
+        $fallback = $this->actingAs($user)->getJson(route('user-subscription.instruction', [
             'user_subscription_id' => $userSub->id,
             'protocol' => 'vless',
         ]));
-        $vless->assertOk();
-        $this->assertStringContainsString('VLESS', (string) $vless->json('html'));
-        $this->assertStringNotContainsString('AmneziaWG QR', (string) $vless->json('html'));
+        $fallback->assertOk();
+        $fallbackHtml = (string) $fallback->json('html');
+        $this->assertStringContainsString('AmneziaVPN', $fallbackHtml);
+        $this->assertStringNotContainsString('VLESS', $fallbackHtml);
 
         $tabbed = $this->actingAs($user)->getJson(route('user-subscription.instruction', [
             'user_subscription_id' => $userSub->id,

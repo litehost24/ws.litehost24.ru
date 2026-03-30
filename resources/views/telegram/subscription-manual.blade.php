@@ -25,10 +25,9 @@
 <body>
 @php
     $protocol = trim((string) ($protocol ?? ''));
-    $singleProtocol = in_array($protocol, ['amnezia_vpn', 'amneziawg', 'vless'], true) ? $protocol : '';
+    $singleProtocol = in_array($protocol, ['amnezia_vpn', 'amneziawg'], true) ? $protocol : '';
     $manualData = [
         'id' => $id,
-        'vlessUrl' => $vlessUrl ?? '',
         'wireguardQrDataUri' => $wireguardQrDataUri ?? null,
         'awgQrDataUri' => $awgQrDataUri ?? null,
         'wireguardConfig' => $wireguardConfig ?? '',
@@ -44,9 +43,6 @@
     @else
         {!! view('subscription.manual_amnezia_vpn', $manualData)->render() !!}
         {!! view('subscription.manual_amneziawg', $manualData)->render() !!}
-        @if(trim((string) ($manualData['vlessUrl'] ?? '')) !== '')
-            {!! view('subscription.manual_vless', $manualData)->render() !!}
-        @endif
     @endif
 </div>
 

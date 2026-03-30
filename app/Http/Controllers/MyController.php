@@ -85,20 +85,6 @@ class MyController extends Controller
             ->whereNotNull('telegram_chat_id')
             ->exists();
 
-        $vlessBlockedUntil = null;
-        if ($subListForInfo->isNotEmpty()) {
-            $blockedSubs = $subListForInfo->filter(function ($sub) {
-                return !empty($sub->vless_blocked_until)
-                    && $sub->vless_blocked_until instanceof Carbon
-                    && $sub->vless_blocked_until->isFuture();
-            });
-            if ($blockedSubs->isNotEmpty()) {
-                $vlessBlockedUntil = $blockedSubs->max(function ($sub) {
-                    return $sub->vless_blocked_until;
-                });
-            }
-        }
-
         return view('payment.show', [
             'balance' => $balance,
             'subs' => $subs,
@@ -108,7 +94,6 @@ class MyController extends Controller
             'previousPublications' => $previousPublications,
             'nextVpnPriceRub' => $nextVpnPriceRub,
             'hasTelegram' => $hasTelegram,
-            'vlessBlockedUntil' => $vlessBlockedUntil,
         ]);
     }
 

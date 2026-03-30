@@ -431,13 +431,11 @@ class TelegramBotReferralTest extends TestCase
         $texts = $buttons->pluck('text')->all();
         $urls = $buttons->pluck('url')->filter()->all();
 
-        $this->assertCount(3, $buttons);
+        $this->assertCount(2, $buttons);
         $this->assertContains('AmneziaVPN (Android)', $texts);
         $this->assertContains('AmneziaWG (iPhone)', $texts);
-        $this->assertContains('VLESS', $texts);
         $this->assertTrue(collect($urls)->contains(fn ($url) => str_contains((string) $url, '/telegram/config/instruction') && str_contains((string) $url, 'user_subscription_id=' . $userSub->id) && str_contains((string) $url, 'protocol=amnezia_vpn')));
         $this->assertTrue(collect($urls)->contains(fn ($url) => str_contains((string) $url, '/telegram/config/instruction') && str_contains((string) $url, 'user_subscription_id=' . $userSub->id) && str_contains((string) $url, 'protocol=amneziawg')));
-        $this->assertTrue(collect($urls)->contains(fn ($url) => str_contains((string) $url, '/telegram/config/instruction') && str_contains((string) $url, 'user_subscription_id=' . $userSub->id) && str_contains((string) $url, 'protocol=vless')));
 
         Http::assertNotSent(function (Request $request) {
             if (!str_contains($request->url(), '/sendMessage')) {

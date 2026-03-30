@@ -122,7 +122,6 @@ class MigrateSubscriptions extends Command
 
                 $sub->update([
                     'file_path' => $package['file_path'],
-                    'connection_config' => $package['vless_url'],
                 ]);
 
                 $migration->processed_count++;

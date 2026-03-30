@@ -248,9 +248,6 @@
                                     <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider" title="Сумма total_bytes_delta по peer_name за все дни (Amnezia)">
                                         Трафик (Amnezia)
                                     </th>
-                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider" title="Сумма vless_total_bytes_delta по peer_name за все дни (VLESS)">
-                                        Трафик (VLESS)
-                                    </th>
                                     <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                                         <a href="{{ route('admin.subscriptions.index', array_merge(request()->query(), ['sort_by' => 'end_date', 'sort_order' => $sortBy === 'end_date' && $sortOrder === 'asc' ? 'desc' : 'asc'])) }}" class="hover:text-gray-700">
                                             Окончание
@@ -340,7 +337,7 @@
                                             $firstSwitchTargetMode = $first->switchTargetVpnAccessMode();
                                             $firstSwitchTargetLabel = $firstSwitchTargetMode ? (\App\Models\Server::vpnAccessModeOptions()[$firstSwitchTargetMode] ?? null) : null;
                                             $firstCanSwitchVpnAccessMode = (bool) ($first->canSwitchVpnAccessMode() && $firstSwitchTargetMode && $firstSwitchTargetLabel);
-                                            $firstSwitchWarningText = 'После переключения старый AmneziaWG-конфиг перестанет работать. VLESS не изменится. Пользователю нужно будет скачать новый AmneziaWG-конфиг.';
+                                            $firstSwitchWarningText = 'После переключения старый AmneziaWG-конфиг перестанет работать. Пользователю нужно будет скачать новый AmneziaWG-конфиг.';
                                             $firstSwitchTooltip = $firstSwitchTargetLabel
                                                 ? ('Переключить на ' . $firstSwitchTargetLabel . '. ' . $firstSwitchWarningText)
                                                 : $firstSwitchWarningText;
@@ -435,7 +432,7 @@
                                                         </a>
                                                 @endif
                                                 @if($firstCanSwitchVpnAccessMode)
-                                                        <form method="POST" action="{{ route('admin.subscriptions.switch-vpn-access-mode', ['userSubscription' => $first->id]) }}" onsubmit="return confirm('После переключения старый AmneziaWG-конфиг перестанет работать. VLESS не изменится. Пользователю нужно будет скачать новый AmneziaWG-конфиг. Продолжить?');" class="inline-block">
+                                                        <form method="POST" action="{{ route('admin.subscriptions.switch-vpn-access-mode', ['userSubscription' => $first->id]) }}" onsubmit="return confirm('После переключения старый AmneziaWG-конфиг перестанет работать. Пользователю нужно будет скачать новый AmneziaWG-конфиг. Продолжить?');" class="inline-block">
                                                             @csrf
                                                             <input type="hidden" name="vpn_access_mode" value="{{ $firstSwitchTargetMode }}">
                                                             <button type="submit" class="admin-subs-tooltip inline-flex h-7 items-center rounded border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-800 hover:bg-amber-100" data-tooltip="{{ $firstSwitchTooltip }}" title="{{ $firstSwitchTooltip }}" aria-label="{{ $firstSwitchTooltip }}">
@@ -471,9 +468,6 @@
                                         </td>
                                         <td class="px-2 py-2 whitespace-nowrap" title="{{ $first->traffic_total_bytes === null ? '' : ((int) $first->traffic_total_bytes . ' B') }}">
                                             {{ $formatBytes($first->traffic_total_bytes) }}
-                                        </td>
-                                        <td class="px-2 py-2 whitespace-nowrap" title="{{ $first->traffic_total_bytes_vless === null ? '' : ((int) $first->traffic_total_bytes_vless . ' B') }}">
-                                            {{ $formatBytes($first->traffic_total_bytes_vless) }}
                                         </td>
                                         <td class="px-2 py-2 whitespace-nowrap">{{ \Carbon\Carbon::parse($first->end_date)->format('d.m.Y') }}</td>
                                         <td class="px-2 py-2 whitespace-nowrap">
@@ -541,11 +535,6 @@
                                             @if($first->has_server_status_conflict)
                                                 <span class="ms-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-yellow-100 text-yellow-800 font-bold" title="Конфликт">!</span>
                                             @endif
-                                            @if(!empty($first->vless_blocked_until) && $first->vless_blocked_until->isFuture())
-                                                <span class="ms-2 inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800" title="VLESS отключен до {{ $first->vless_blocked_until->timezone('Europe/Moscow')->format('d.m.Y H:i') }} (МСК)">
-                                                    VLESS off до {{ $first->vless_blocked_until->timezone('Europe/Moscow')->format('d.m H:i') }}
-                                                </span>
-                                            @endif
                                         </td>
                                         <td class="px-2 py-2 whitespace-nowrap">
                                             {{ $first->action_error ?: '-' }}
@@ -564,7 +553,7 @@
                                                     $subSwitchTargetMode = $sub->switchTargetVpnAccessMode();
                                                     $subSwitchTargetLabel = $subSwitchTargetMode ? (\App\Models\Server::vpnAccessModeOptions()[$subSwitchTargetMode] ?? null) : null;
                                                     $subCanSwitchVpnAccessMode = (bool) ($sub->canSwitchVpnAccessMode() && $subSwitchTargetMode && $subSwitchTargetLabel);
-                                                    $subSwitchWarningText = 'После переключения старый AmneziaWG-конфиг перестанет работать. VLESS не изменится. Пользователю нужно будет скачать новый AmneziaWG-конфиг.';
+                                                    $subSwitchWarningText = 'После переключения старый AmneziaWG-конфиг перестанет работать. Пользователю нужно будет скачать новый AmneziaWG-конфиг.';
                                                     $subSwitchTooltip = $subSwitchTargetLabel
                                                         ? ('Переключить на ' . $subSwitchTargetLabel . '. ' . $subSwitchWarningText)
                                                         : $subSwitchWarningText;
@@ -607,7 +596,7 @@
                                                             </svg>
                                                         </a>
                                                         @if($subCanSwitchVpnAccessMode)
-                                                        <form method="POST" action="{{ route('admin.subscriptions.switch-vpn-access-mode', ['userSubscription' => $sub->id]) }}" onsubmit="return confirm('После переключения старый AmneziaWG-конфиг перестанет работать. VLESS не изменится. Пользователю нужно будет скачать новый AmneziaWG-конфиг. Продолжить?');" class="inline-block">
+                                                        <form method="POST" action="{{ route('admin.subscriptions.switch-vpn-access-mode', ['userSubscription' => $sub->id]) }}" onsubmit="return confirm('После переключения старый AmneziaWG-конфиг перестанет работать. Пользователю нужно будет скачать новый AmneziaWG-конфиг. Продолжить?');" class="inline-block">
                                                             @csrf
                                                             <input type="hidden" name="vpn_access_mode" value="{{ $subSwitchTargetMode }}">
                                                             <button type="submit" class="admin-subs-tooltip inline-flex h-7 items-center rounded border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-800 hover:bg-amber-100" data-tooltip="{{ $subSwitchTooltip }}" title="{{ $subSwitchTooltip }}" aria-label="{{ $subSwitchTooltip }}">
@@ -637,9 +626,6 @@
                                             </td>
                                             <td class="px-2 py-2 whitespace-nowrap" title="{{ $sub->traffic_total_bytes === null ? '' : ((int) $sub->traffic_total_bytes . ' B') }}">
                                                 {{ $formatBytes($sub->traffic_total_bytes) }}
-                                            </td>
-                                            <td class="px-2 py-2 whitespace-nowrap" title="{{ $sub->traffic_total_bytes_vless === null ? '' : ((int) $sub->traffic_total_bytes_vless . ' B') }}">
-                                                {{ $formatBytes($sub->traffic_total_bytes_vless) }}
                                             </td>
                                             <td class="px-2 py-2 whitespace-nowrap">{{ \Carbon\Carbon::parse($sub->end_date)->format('d.m.Y') }}</td>
                                             <td class="px-2 py-2 whitespace-nowrap">
@@ -706,11 +692,6 @@
                                                 {!! $statusIcon($sub->effective_status) !!}
                                                 @if($sub->has_server_status_conflict)
                                                     <span class="ms-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-yellow-100 text-yellow-800 font-bold" title="Конфликт">!</span>
-                                                @endif
-                                                @if(!empty($sub->vless_blocked_until) && $sub->vless_blocked_until->isFuture())
-                                                    <span class="ms-2 inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800" title="VLESS отключен до {{ $sub->vless_blocked_until->timezone('Europe/Moscow')->format('d.m.Y H:i') }} (МСК)">
-                                                        VLESS off до {{ $sub->vless_blocked_until->timezone('Europe/Moscow')->format('d.m H:i') }}
-                                                    </span>
                                                 @endif
                                             </td>
                                             <td class="px-2 py-2 whitespace-nowrap">
@@ -877,7 +858,6 @@
                         class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
                         <option value="">Без шаблона</option>
-                        <option value="vless_to_amnezia">Переход с VLESS на Amnezia VPN</option>
                     </select>
                 </div>
 
@@ -1226,12 +1206,7 @@
                 return;
             }
 
-            const messageTemplates = {
-                vless_to_amnezia: {
-                    subject: 'Информация от Litehost24',
-                    body: 'Обратили внимание, что сейчас у вас используется протокол VLESS. Рекомендуем перейти на Amnezia VPN: с ним Telegram, WhatsApp и другие сервисы обычно работают стабильнее. Для этого достаточно подключиться через приложение Amnezia VPN. Инструкцию по подключению вы найдете в личном кабинете.',
-                },
-            };
+            const messageTemplates = {};
 
             function closeModal() {
                 modal.classList.add('hidden');

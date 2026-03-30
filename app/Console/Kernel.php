@@ -49,9 +49,6 @@ class Kernel extends ConsoleKernel
 
         // Finish grace-period VPN mode switches by disabling old peers after the timeout.
         $schedule->command('subscriptions:complete-vpn-access-switches')->everyMinute()->withoutOverlapping();
-
-        // Enforce single-protocol usage: disable VLESS for 1 hour on dual-protocol activity.
-        $schedule->command('subscriptions:enforce-vless-rule')->everyFiveMinutes();
     }
 
     /**
