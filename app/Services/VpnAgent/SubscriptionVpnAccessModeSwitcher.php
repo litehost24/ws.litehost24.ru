@@ -4,11 +4,13 @@ namespace App\Services\VpnAgent;
 
 use App\Models\Server;
 use App\Models\UserSubscription;
+use App\Models\VpnPeerServerState;
 use App\Models\components\InboundManagerVless;
 use App\Models\components\SubscriptionPackageBuilder;
 use App\Support\VpnPeerName;
 use Exception;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class SubscriptionVpnAccessModeSwitcher
 {
@@ -47,9 +49,11 @@ class SubscriptionVpnAccessModeSwitcher
             ->buildForEmail($peerName);
 
         $this->enableTarget($targetServer, $peerName);
+        $this->syncServerState($targetServer, $peerName, 'enabled', (int) $subscription->user_id);
 
         try {
             $this->disableSource($currentServer, $targetServer, $peerName);
+            $this->syncServerState($currentServer, $peerName, 'disabled', (int) $subscription->user_id);
         } catch (\Throwable $e) {
             $this->rollbackTarget($targetServer, $peerName);
             throw new Exception('Не удалось отключить старый сервер: ' . $e->getMessage(), 0, $e);
@@ -108,6 +112,7 @@ class SubscriptionVpnAccessModeSwitcher
             ->buildForEmail($peerName);
 
         $this->enableTarget($targetServer, $peerName);
+        $this->syncServerState($targetServer, $peerName, 'enabled', (int) $subscription->user_id);
 
         $disconnectAt = $disconnectAt ?: Carbon::now()->addMinutes(self::USER_SWITCH_GRACE_MINUTES);
 
@@ -154,6 +159,7 @@ class SubscriptionVpnAccessModeSwitcher
 
         try {
             $this->disableSource($sourceServer, $targetServer, $peerName);
+            $this->syncServerState($sourceServer, $peerName, 'disabled', (int) $subscription->user_id);
         } catch (\Throwable $e) {
             $subscription->update([
                 'pending_vpn_access_mode_error' => $e->getMessage(),
@@ -223,8 +229,32 @@ class SubscriptionVpnAccessModeSwitcher
             if ($targetServer->usesNode1Api()) {
                 (new Node1Provisioner())->disableByName($targetServer, $peerName);
             }
+            $this->syncServerState($targetServer, $peerName, 'disabled');
         } catch (\Throwable) {
         }
+    }
+
+    private function syncServerState(?Server $server, string $peerName, string $status, ?int $userId = null): void
+    {
+        if (!$server || (int) ($server->id ?? 0) <= 0 || trim($peerName) === '') {
+            return;
+        }
+
+        if (!Schema::hasTable('vpn_peer_server_states')) {
+            return;
+        }
+
+        VpnPeerServerState::query()->updateOrCreate(
+            [
+                'server_id' => (int) $server->id,
+                'peer_name' => $peerName,
+            ],
+            [
+                'user_id' => $userId,
+                'server_status' => $status,
+                'status_fetched_at' => Carbon::now(),
+            ]
+        );
     }
 
     /**

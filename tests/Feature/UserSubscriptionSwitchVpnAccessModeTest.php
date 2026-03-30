@@ -7,6 +7,7 @@ use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Models\UserSubscription;
+use App\Models\VpnPeerServerState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -80,6 +81,15 @@ class UserSubscriptionSwitchVpnAccessModeTest extends TestCase
         $this->assertSame('device-main', (string) $updated->pending_vpn_access_mode_source_peer_name);
         $this->assertNotNull($updated->pending_vpn_access_mode_disconnect_at);
         $this->assertNull($updated->pending_vpn_access_mode_error);
+
+        $targetState = VpnPeerServerState::query()
+            ->where('server_id', $regular->id)
+            ->where('peer_name', 'device-main')
+            ->first();
+        $this->assertNotNull($targetState);
+        $this->assertSame('enabled', (string) $targetState->server_status);
+        $this->assertSame((int) $user->id, (int) $targetState->user_id);
+        $this->assertNotNull($targetState->status_fetched_at);
 
         $cardsHtml = (string) $response->json('cards_html');
         $this->assertStringContainsString('Обычное подключение', $cardsHtml);

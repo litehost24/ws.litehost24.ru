@@ -6,6 +6,7 @@ use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Models\UserSubscription;
+use App\Models\VpnPeerServerState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -58,6 +59,14 @@ class CompletePendingVpnAccessSwitchesCommandTest extends TestCase
             'pending_vpn_access_mode_error' => 'temporary',
         ]);
 
+        VpnPeerServerState::query()->create([
+            'server_id' => $sourceServer->id,
+            'user_id' => $user->id,
+            'peer_name' => 'device-main',
+            'server_status' => 'enabled',
+            'status_fetched_at' => now()->subMinutes(2),
+        ]);
+
         $this->artisan('subscriptions:complete-vpn-access-switches')
             ->assertSuccessful();
 
@@ -67,5 +76,14 @@ class CompletePendingVpnAccessSwitchesCommandTest extends TestCase
         $this->assertNull($updated->pending_vpn_access_mode_source_peer_name);
         $this->assertNull($updated->pending_vpn_access_mode_disconnect_at);
         $this->assertNull($updated->pending_vpn_access_mode_error);
+
+        $sourceState = VpnPeerServerState::query()
+            ->where('server_id', $sourceServer->id)
+            ->where('peer_name', 'device-main')
+            ->first();
+        $this->assertNotNull($sourceState);
+        $this->assertSame('disabled', (string) $sourceState->server_status);
+        $this->assertSame((int) $user->id, (int) $sourceState->user_id);
+        $this->assertTrue($sourceState->status_fetched_at !== null && $sourceState->status_fetched_at->greaterThan(now()->subMinute()));
     }
 }
