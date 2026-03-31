@@ -345,7 +345,8 @@ class UserSubscription extends Model
             return false;
         }
 
-        if (($this->end_date ?? null) === self::AWAIT_PAYMENT_DATE) {
+        $endDate = trim((string) ($this->end_date ?? ''));
+        if ($endDate === '' || $endDate === self::AWAIT_PAYMENT_DATE) {
             return false;
         }
 
@@ -353,7 +354,11 @@ class UserSubscription extends Model
             return false;
         }
 
-        return true;
+        try {
+            return Carbon::parse($endDate)->toDateString() > Carbon::today()->toDateString();
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public function resolveServerId(): ?int

@@ -8,6 +8,8 @@ use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Models\UserSubscription;
+use App\Models\VpnPeerServerState;
+use App\Support\VpnPeerName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -124,5 +126,17 @@ class UserSubscriptionAddVpnTest extends TestCase
         $this->assertNotNull($created);
         $this->assertSame((int) $white->id, (int) $created->server_id);
         $this->assertSame(Server::VPN_ACCESS_WHITE_IP, (string) $created->vpn_access_mode);
+
+        $peerName = VpnPeerName::fromSubscription($created, $created->resolveServerId());
+        $this->assertNotNull($peerName);
+
+        $state = VpnPeerServerState::query()
+            ->where('server_id', $white->id)
+            ->where('peer_name', $peerName)
+            ->first();
+
+        $this->assertNotNull($state);
+        $this->assertSame('enabled', (string) $state->server_status);
+        $this->assertSame((int) $user->id, (int) $state->user_id);
     }
 }

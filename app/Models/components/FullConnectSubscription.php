@@ -47,6 +47,28 @@ class FullConnectSubscription
 
         // Tests should not depend on external server services.
         if (app()->environment('testing')) {
+            $testServerId = (int) ($resolvedServer?->id ?? 0);
+            $testPeerName = sprintf(
+                'vpn-%d-%d-%d-test',
+                $testServerId,
+                (int) (Auth::user()->id ?? 0),
+                (int) ($this->sub->id ?? 0)
+            );
+            $datePart = Carbon::now()->format('d_m_Y_H_i');
+            $fakeFilePath = $testServerId > 0
+                ? sprintf(
+                    'files/%d_%s_%d_%s/%d_%s_%d_%s.zip',
+                    (int) (Auth::user()->id ?? 0),
+                    $testPeerName,
+                    $testServerId,
+                    $datePart,
+                    (int) (Auth::user()->id ?? 0),
+                    $testPeerName,
+                    $testServerId,
+                    $datePart
+                )
+                : 'files/test.zip';
+
             $created = UserSubscription::create([
                 'subscription_id' => $this->sub->id,
                 'user_id' => Auth::user()->id,
@@ -54,7 +76,7 @@ class FullConnectSubscription
                 'price' => $finalPrice,
                 'action' => 'create',
                 'is_processed' => 1,
-                'file_path' => 'files/test.zip',
+                'file_path' => $fakeFilePath,
                 'is_rebilling' => true,
                 'end_date' => UserSubscription::nextMonthlyEndDate(Carbon::today()->toDateString()),
                 'connection_config' => null,
@@ -62,6 +84,9 @@ class FullConnectSubscription
                 'vpn_access_mode' => $resolvedMode,
                 'note' => $this->note,
             ]);
+            if ($resolvedServer) {
+                $this->peerOperator()->syncServerState($resolvedServer, $testPeerName, 'enabled', (int) Auth::user()->id);
+            }
             if ($this->sub && $created && $referral) {
                 $pricing->applyEarning($created, $this->sub, $referrer, $referral);
             }
@@ -95,6 +120,7 @@ class FullConnectSubscription
             'vpn_access_mode' => $server->getVpnAccessMode(),
             'note' => $this->note,
         ]);
+        $this->peerOperator()->syncServerState($server, (string) ($package['email'] ?? ''), 'enabled', (int) Auth::user()->id);
         if ($this->sub && $created && $referral) {
             $pricing->applyEarning($created, $this->sub, $referrer, $referral);
         }
