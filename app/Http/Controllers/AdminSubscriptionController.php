@@ -110,6 +110,28 @@ class AdminSubscriptionController extends Controller
             $userSub->admin_delete_reason = $deleteCheck['reason'];
         }
 
+        $paidNoSubUsers = collect([]);
+        if ($statusFilter === 'paid_no_sub') {
+            $paidNoSubUsers = User::query()
+                ->select(
+                    'users.id',
+                    'users.name',
+                    'users.email',
+                    'users.role',
+                    'users.created_at',
+                    DB::raw('COUNT(payments.id) as payment_count'),
+                    DB::raw('SUM(payments.amount) as payment_total'),
+                    DB::raw('MAX(payments.created_at) as last_payment_at')
+                )
+                ->join('payments', 'payments.user_id', '=', 'users.id')
+                ->leftJoin('user_subscriptions', 'user_subscriptions.user_id', '=', 'users.id')
+                ->whereNull('user_subscriptions.id')
+                ->where('payments.amount', '>', 0)
+                ->groupBy('users.id', 'users.name', 'users.email', 'users.role', 'users.created_at')
+                ->orderByDesc('last_payment_at')
+                ->get();
+        }
+
         if ($statusFilter === 'active') {
             $latestUserSubscriptions = $latestUserSubscriptions->filter(function ($item) {
                 return (bool) $item->is_active;
@@ -364,6 +386,7 @@ class AdminSubscriptionController extends Controller
             'selectedServerId' => $selectedServerId,
             'migration' => $migration,
             'migrationErrors' => $migrationErrors,
+            'paidNoSubUsers' => $paidNoSubUsers,
             'totalUsers' => $totalUsers,
             'onlineUsers' => $onlineUsers,
             'activeUsers' => $activeUsers,

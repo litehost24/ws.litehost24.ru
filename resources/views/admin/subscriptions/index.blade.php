@@ -25,6 +25,10 @@
                                class="px-4 py-2 text-sm font-medium rounded-md {{ $statusFilter === 'inactive' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700' }}">
                                 Неактивные
                             </a>
+                            <a href="{{ route('admin.subscriptions.index', ['status' => 'paid_no_sub']) }}"
+                               class="px-4 py-2 text-sm font-medium rounded-md {{ $statusFilter === 'paid_no_sub' ? 'bg-amber-500 text-white' : 'bg-gray-200 text-gray-700' }}">
+                                Оплатили без подписки
+                            </a>
                         </div>
                     </div>
 
@@ -194,6 +198,97 @@
                                 return $config;
                             };
                         @endphp
+                        @if($statusFilter === 'paid_no_sub')
+                            @php
+                                $paidNoSubTotal = $paidNoSubUsers->sum('payment_total');
+                            @endphp
+                            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                        <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Пользователь</th>
+                                        <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                                        <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Платежи</th>
+                                        <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Сумма оплат</th>
+                                        <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Последний платеж</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    @foreach($paidNoSubUsers as $user)
+                                        @php
+                                            $lastPaidAt = $user->last_payment_at ? \Carbon\Carbon::parse($user->last_payment_at) : null;
+                                        @endphp
+                                        <tr class="{{ $loop->odd ? 'bg-gray-100' : '' }}">
+                                            <td class="px-2 py-2 whitespace-nowrap">{{ $user->id }}</td>
+                                            <td class="px-2 py-2 whitespace-nowrap">
+                                                <div class="flex items-center justify-between gap-3">
+                                                    <div class="flex min-w-0 flex-col">
+                                                        @php
+                                                            $paidNameClasses = 'admin-subs-tooltip admin-subs-user-link text-left underline-offset-2 hover:underline';
+                                                            if (($user->role ?? '') === 'spy') {
+                                                                $paidNameClasses .= ' rounded px-1.5 py-0.5 admin-subs-spy font-semibold';
+                                                            }
+                                                        @endphp
+                                                        <button
+                                                            type="button"
+                                                            class="{{ $paidNameClasses }}"
+                                                            data-tooltip="Открыть детали"
+                                                            data-user-id="{{ $user->id }}"
+                                                        >
+                                                            {{ $user->name ?? 'N/A' }}
+                                                        </button>
+                                                        @if($user->created_at)
+                                                            <span class="mt-0.5 text-[11px] leading-4 text-gray-500">
+                                                                {{ $user->created_at->format('d.m.Y H:i') }}
+                                                            </span>
+                                                        @endif
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        class="admin-subs-tooltip admin-subs-message-open inline-flex h-7 w-7 items-center justify-center rounded border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                                        data-tooltip="Отправить письмо"
+                                                        data-user-id="{{ $user->id }}"
+                                                        data-user-name="{{ $user->name ?? '' }}"
+                                                        data-user-email="{{ $user->email ?? '' }}"
+                                                        data-payment-total="{{ (int) ($user->payment_total ?? 0) }}"
+                                                        data-default-subject="Информация от Litehost24"
+                                                        aria-label="Отправить письмо"
+                                                        title="Отправить письмо"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                                            <path d="M2.94 6.34A2 2 0 0 1 4.8 5h10.4a2 2 0 0 1 1.86 1.34L10 10.79 2.94 6.34Z" />
+                                                            <path d="M2 8.24v6.26A2.5 2.5 0 0 0 4.5 17h11a2.5 2.5 0 0 0 2.5-2.5V8.24l-7.47 4.7a1 1 0 0 1-1.06 0L2 8.24Z" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                            <td class="px-2 py-2 whitespace-nowrap">{{ $user->email ?? '-' }}</td>
+                                            <td class="px-2 py-2 whitespace-nowrap">{{ (int) $user->payment_count }}</td>
+                                            <td class="px-2 py-2 whitespace-nowrap">{{ number_format(((int) $user->payment_total) / 100, 2, '.', ' ') }} руб.</td>
+                                            <td class="px-2 py-2 whitespace-nowrap">
+                                                {{ $lastPaidAt ? $lastPaidAt->timezone('Europe/Moscow')->format('d.m.Y H:i') : '-' }}
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                                <tfoot class="bg-gray-50">
+                                    <tr>
+                                        <td class="px-2 py-2 text-xs font-semibold text-gray-700 whitespace-nowrap" colspan="3">
+                                            Всего пользователей: {{ $paidNoSubUsers->count() }}
+                                        </td>
+                                        <td class="px-2 py-2 text-xs font-semibold text-gray-700 whitespace-nowrap" colspan="4">
+                                            Сумма оплат: {{ number_format(((int) $paidNoSubTotal) / 100, 2, '.', ' ') }} руб.
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+
+                            @if(count($paidNoSubUsers) === 0)
+                                <div class="text-center py-8">
+                                    <p class="text-gray-500">Нет пользователей с оплатами без подписки</p>
+                                </div>
+                            @endif
+                        @else
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                             <thead class="bg-gray-50">
                                 <tr>
@@ -324,6 +419,8 @@
                                                 $nameClasses .= ' rounded px-1.5 py-0.5 bg-red-100 text-red-800 font-semibold';
                                             } elseif ($sharingLevel === 'warning') {
                                                 $nameClasses .= ' rounded px-1.5 py-0.5 bg-amber-100 text-amber-900 font-semibold';
+                                            } elseif (($first->user?->role ?? '') === 'spy') {
+                                                $nameClasses .= ' rounded px-1.5 py-0.5 admin-subs-spy font-semibold';
                                             }
                                             $refLabel = ($refUser
                                                 ? ('Реферал от: ' . ($refUser->name ?? 'N/A') . ' (#' . $refUser->id . ')')
@@ -737,6 +834,7 @@
                             <div class="text-center py-8">
                                 <p class="text-gray-500">Нет данных о подписках пользователей</p>
                             </div>
+                        @endif
                         @endif
 
                     </div>
@@ -1213,7 +1311,30 @@
                 return;
             }
 
-            const messageTemplates = {};
+            @php
+                $supportContacts = [
+                    'phone' => $contacts['phone'] ?? '',
+                    'telegram' => $contacts['telegram'] ?? '',
+                    'whatsapp' => !empty($contacts['whatsapp_href']) ? ($contacts['phone'] ?? '') : '',
+                    'email' => $contacts['email'] ?? '',
+                ];
+            @endphp
+            const supportContacts = @json($supportContacts);
+
+            const messageTemplates = {
+                paid_no_subscription: {
+                    label: 'Оплата без подписки',
+                    subject: 'Поможем оформить подписку',
+                    body: 'Мы видим, что у вас была оплата на {amount_rub}, но подписка ещё не оформлена. Подскажите, пожалуйста, по какой причине не удалось завести подписку?\n\nЕсли нужна помощь — мы с удовольствием подскажем и проведём по шагам.\n\nСвяжитесь с нами удобным способом:\n{contacts_block}',
+                },
+            };
+
+            Object.entries(messageTemplates).forEach(function ([key, tpl]) {
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = tpl.label || key;
+                templateSelect.appendChild(option);
+            });
 
             function closeModal() {
                 modal.classList.add('hidden');
@@ -1251,13 +1372,39 @@
                 return 'Здравствуйте, ' + trimmed + '!';
             }
 
+            function formatRubFromCents(cents) {
+                const value = Number(cents || 0) / 100;
+                return value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' руб.';
+            }
+
+            function buildContactsBlock(contacts) {
+                const lines = [];
+                if (contacts.phone) lines.push('Телефон: ' + contacts.phone);
+                if (contacts.telegram) lines.push('Telegram: ' + contacts.telegram);
+                if (contacts.whatsapp) lines.push('WhatsApp: ' + contacts.whatsapp);
+                if (contacts.email) lines.push('Email: ' + contacts.email);
+                return lines.join('\n');
+            }
+
+            function renderTemplate(text, vars) {
+                return String(text || '').replace(/\{(\w+)\}/g, function (match, key) {
+                    const value = vars[key];
+                    return value == null ? match : String(value);
+                });
+            }
+
             function applyTemplate(templateKey, userName, defaultSubject) {
                 const greeting = buildGreeting(userName);
                 const template = templateKey ? messageTemplates[templateKey] : null;
+                const paymentTotal = Number(form.dataset.paymentTotal || 0);
+                const vars = {
+                    amount_rub: paymentTotal > 0 ? formatRubFromCents(paymentTotal) : '',
+                    contacts_block: buildContactsBlock(supportContacts),
+                };
 
                 subjectInput.value = (template && template.subject) ? template.subject : defaultSubject;
                 bodyInput.value = template && template.body
-                    ? greeting + '\n\n' + template.body
+                    ? greeting + '\n\n' + renderTemplate(template.body, vars)
                     : greeting + '\n';
             }
 
@@ -1267,12 +1414,18 @@
                     const userName = button.getAttribute('data-user-name') || '';
                     const userEmail = button.getAttribute('data-user-email') || '';
                     const defaultSubject = button.getAttribute('data-default-subject') || 'Информация от Litehost24';
+                    const paymentTotal = button.getAttribute('data-payment-total') || '';
 
                     userIdInput.value = userId;
                     nameEl.textContent = userName || '—';
                     emailEl.textContent = userEmail || '—';
-                    templateSelect.value = '';
-                    applyTemplate('', userName, defaultSubject);
+                    form.dataset.paymentTotal = paymentTotal;
+                    if (Number(paymentTotal || 0) > 0) {
+                        templateSelect.value = 'paid_no_subscription';
+                    } else {
+                        templateSelect.value = '';
+                    }
+                    applyTemplate(templateSelect.value, userName, defaultSubject);
                     resetStatus();
                     const emailMissing = userEmail.trim() === '';
                     sendButton.disabled = emailMissing;
@@ -1377,6 +1530,11 @@
         .admin-user-message-dialog {
             width: min(720px, calc(100% - 2rem));
             margin: 2rem auto;
+        }
+
+        .admin-subs-spy {
+            background: #fce7f3;
+            color: #9d174d;
         }
     </style>
 </x-app-layout>
