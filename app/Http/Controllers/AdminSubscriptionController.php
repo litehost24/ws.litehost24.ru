@@ -432,12 +432,13 @@ class AdminSubscriptionController extends Controller
     {
         $userId = (int) ($subscription->user_id ?? 0);
         $peerName = trim((string) ($subscription->peer_name ?? ''));
+        $isActive = (bool) ($subscription->is_active ?? false);
 
-        if ($userId <= 0 || $peerName === '') {
+        if (!$isActive || $userId <= 0 || $peerName === '') {
             return null;
         }
 
-        // One logical device keeps the same peer name even if it was moved between servers.
+        // Collapse only currently active duplicate peers; keep inactive slots visible in admin.
         return $userId . ':' . $peerName;
     }
 

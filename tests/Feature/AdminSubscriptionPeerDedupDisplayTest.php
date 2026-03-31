@@ -74,7 +74,7 @@ class AdminSubscriptionPeerDedupDisplayTest extends TestCase
         $this->assertSame((int) $latestSamePeer->id, (int) $rows->first()->id);
     }
 
-    public function test_admin_subscriptions_index_hides_shadow_row_for_same_peer_on_old_server(): void
+    public function test_admin_subscriptions_index_keeps_inactive_slot_visible_even_with_same_peer_on_old_server(): void
     {
         $admin = User::factory()->create([
             'role' => 'admin',
@@ -111,7 +111,7 @@ class AdminSubscriptionPeerDedupDisplayTest extends TestCase
         $oldSubscription = Subscription::factory()->create(['name' => 'VPN']);
         $newSubscription = Subscription::factory()->create(['name' => 'VPN']);
 
-        UserSubscription::factory()->create([
+        $inactiveSlot = UserSubscription::factory()->create([
             'user_id' => $user->id,
             'subscription_id' => $oldSubscription->id,
             'action' => 'create',
@@ -141,7 +141,8 @@ class AdminSubscriptionPeerDedupDisplayTest extends TestCase
 
         $rows = $response->viewData('userSubscriptions');
 
-        $this->assertCount(1, $rows);
-        $this->assertSame((int) $current->id, (int) $rows->first()->id);
+        $this->assertCount(2, $rows);
+        $this->assertTrue($rows->contains(fn ($row) => (int) $row->id === (int) $current->id));
+        $this->assertTrue($rows->contains(fn ($row) => (int) $row->id === (int) $inactiveSlot->id));
     }
 }
