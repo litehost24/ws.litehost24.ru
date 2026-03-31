@@ -16,7 +16,7 @@
                     <form action="/payment/init" class="modal-payment__form" target="_blank" method="post">
                         <input type="number" name="sum" placeholder="Укажите сумму"
                                class="modal-payment__sum border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                        <button href="#" class="btn btn-primary" data-bs-dismiss="modal">Пополнить</button>
+                        <button type="submit" class="btn btn-primary" data-bs-dismiss="modal">Перейти к оплате</button>
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                     </form>
                 </div>
