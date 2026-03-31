@@ -7,7 +7,6 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Models\UserSubscription;
 use App\Models\VpnPeerServerState;
-use App\Services\Vless\UserStatusManager;
 use App\Services\VpnAgent\Node1Provisioner;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -86,15 +85,6 @@ class ReconcileSubscriptionServerStateCommandTest extends TestCase
             });
         $this->app->instance(Node1Provisioner::class, $node1Provisioner);
 
-        $userStatusManager = Mockery::mock(UserStatusManager::class);
-        $userStatusManager
-            ->shouldReceive('enable')
-            ->once()
-            ->withArgs(function (Server $actualServer, string $peerName) use ($server) {
-                return (int) $actualServer->id === (int) $server->id && $peerName === '57';
-            });
-        $this->app->instance(UserStatusManager::class, $userStatusManager);
-
         $this->artisan('subscriptions:reconcile-server-state --user-id=' . $user->id)
             ->assertExitCode(0);
 
@@ -153,10 +143,6 @@ class ReconcileSubscriptionServerStateCommandTest extends TestCase
         $node1Provisioner->shouldNotReceive('enableByName');
         $this->app->instance(Node1Provisioner::class, $node1Provisioner);
 
-        $userStatusManager = Mockery::mock(UserStatusManager::class);
-        $userStatusManager->shouldNotReceive('enable');
-        $this->app->instance(UserStatusManager::class, $userStatusManager);
-
         $this->artisan('subscriptions:reconcile-server-state --user-id=' . $user->id . ' --dry-run')
             ->assertExitCode(0);
 
@@ -206,10 +192,6 @@ class ReconcileSubscriptionServerStateCommandTest extends TestCase
         $node1Provisioner = Mockery::mock(Node1Provisioner::class);
         $node1Provisioner->shouldNotReceive('enableByName');
         $this->app->instance(Node1Provisioner::class, $node1Provisioner);
-
-        $userStatusManager = Mockery::mock(UserStatusManager::class);
-        $userStatusManager->shouldNotReceive('enable');
-        $this->app->instance(UserStatusManager::class, $userStatusManager);
 
         $this->artisan('subscriptions:reconcile-server-state --user-id=' . $user->id)
             ->assertExitCode(0);

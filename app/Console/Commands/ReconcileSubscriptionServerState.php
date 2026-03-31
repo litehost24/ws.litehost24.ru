@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use App\Models\Server;
 use App\Models\UserSubscription;
 use App\Models\VpnPeerServerState;
-use App\Services\Vless\UserStatusManager;
 use App\Services\VpnAgent\Node1Provisioner;
 use App\Support\VpnPeerName;
 use Illuminate\Console\Command;
@@ -29,7 +28,7 @@ class ReconcileSubscriptionServerState extends Command
     private const STATE_FRESH_FOR_MINUTES = 10;
     private const RETRY_COOLDOWN_MINUTES = 10;
 
-    public function handle(Node1Provisioner $node1Provisioner, UserStatusManager $userStatusManager): int
+    public function handle(Node1Provisioner $node1Provisioner): int
     {
         if (!Schema::hasTable('vpn_peer_server_states')) {
             $this->info('vpn_peer_server_states table is missing, nothing to reconcile.');
@@ -52,7 +51,6 @@ class ReconcileSubscriptionServerState extends Command
         $stats = [
             'planned' => 0,
             'reconciled' => 0,
-            'partial' => 0,
             'failed' => 0,
             'skipped_no_state' => 0,
             'skipped_stale' => 0,
@@ -102,7 +100,6 @@ class ReconcileSubscriptionServerState extends Command
             }
 
             $node1Ok = false;
-            $vlessOk = true;
             $errors = [];
 
             try {
@@ -110,13 +107,6 @@ class ReconcileSubscriptionServerState extends Command
                 $node1Ok = true;
             } catch (\Throwable $e) {
                 $errors[] = 'node1: ' . $e->getMessage();
-            }
-
-            try {
-                $userStatusManager->enable($server, $peerName);
-            } catch (\Throwable $e) {
-                $vlessOk = false;
-                $errors[] = 'vless: ' . $e->getMessage();
             }
 
             Cache::put($cooldownKey, Carbon::now()->timestamp, Carbon::now()->addMinutes(self::RETRY_COOLDOWN_MINUTES));
@@ -129,15 +119,9 @@ class ReconcileSubscriptionServerState extends Command
                 'peer_name' => $peerName,
             ];
 
-            if ($node1Ok && $vlessOk) {
+            if ($node1Ok) {
                 $stats['reconciled']++;
                 Log::warning('Reconciled active subscription server state.', $context);
-                continue;
-            }
-
-            if ($node1Ok) {
-                $stats['partial']++;
-                Log::warning('Partially reconciled active subscription server state.', $context + ['errors' => $errors]);
                 continue;
             }
 
@@ -146,10 +130,9 @@ class ReconcileSubscriptionServerState extends Command
         }
 
         $this->info(sprintf(
-            'planned=%d reconciled=%d partial=%d failed=%d skipped(no_state=%d stale=%d status=%d cooldown=%d)',
+            'planned=%d reconciled=%d failed=%d skipped(no_state=%d stale=%d status=%d cooldown=%d)',
             $stats['planned'],
             $stats['reconciled'],
-            $stats['partial'],
             $stats['failed'],
             $stats['skipped_no_state'],
             $stats['skipped_stale'],
