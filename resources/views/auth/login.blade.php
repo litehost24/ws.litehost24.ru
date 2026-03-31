@@ -26,7 +26,21 @@
 
             <div class="mt-4">
                 <x-label for="password" value="{{ __('Пароль') }}" />
-                <x-input id="password" class="block mt-1 w-full" type="password" name="password" required autocomplete="current-password" />
+                <div class="relative mt-1">
+                    <x-input id="password" class="block w-full pr-12" type="password" name="password" required autocomplete="current-password" />
+                    <button
+                        type="button"
+                        class="absolute text-gray-500 hover:text-gray-700"
+                        style="right: 12px; top: 50%; transform: translateY(-50%);"
+                        data-toggle-password="password"
+                        aria-label="Показать пароль"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path d="M10 3c-4.5 0-8.1 2.9-9.5 7 1.4 4.1 5 7 9.5 7s8.1-2.9 9.5-7c-1.4-4.1-5-7-9.5-7zm0 12a5 5 0 110-10 5 5 0 010 10z" />
+                            <path d="M10 7a3 3 0 100 6 3 3 0 000-6z" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <div class="block mt-4">
@@ -99,5 +113,21 @@
                 </a>
             </div>
         </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                document.querySelectorAll('[data-toggle-password]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var input = document.getElementById(btn.getAttribute('data-toggle-password'));
+                        if (!input) {
+                            return;
+                        }
+                        var show = input.type === 'password';
+                        input.type = show ? 'text' : 'password';
+                        btn.setAttribute('aria-label', show ? 'Скрыть пароль' : 'Показать пароль');
+                    });
+                });
+            });
+        </script>
     </x-authentication-card>
 </x-guest-layout>
