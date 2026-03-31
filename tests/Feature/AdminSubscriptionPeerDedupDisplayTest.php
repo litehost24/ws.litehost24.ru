@@ -73,4 +73,75 @@ class AdminSubscriptionPeerDedupDisplayTest extends TestCase
         $this->assertCount(1, $rows);
         $this->assertSame((int) $latestSamePeer->id, (int) $rows->first()->id);
     }
+
+    public function test_admin_subscriptions_index_hides_shadow_row_for_same_peer_on_old_server(): void
+    {
+        $admin = User::factory()->create([
+            'role' => 'admin',
+            'email_verified_at' => now(),
+        ]);
+
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $oldServer = Server::query()->create([
+            'ip1' => '84.23.55.167',
+            'node1_api_enabled' => 1,
+            'url1' => 'https://node1-old.example',
+            'username1' => 'u1',
+            'password1' => 'p1',
+            'url2' => 'https://node2-old.example',
+            'username2' => 'u2',
+            'password2' => 'p2',
+        ]);
+
+        $newServer = Server::query()->create([
+            'ip1' => '45.94.47.139',
+            'node1_api_enabled' => 1,
+            'url1' => 'https://node1-new.example',
+            'username1' => 'u3',
+            'password1' => 'p3',
+            'url2' => 'https://node2-new.example',
+            'username2' => 'u4',
+            'password2' => 'p4',
+        ]);
+
+        $oldSubscription = Subscription::factory()->create(['name' => 'VPN']);
+        $newSubscription = Subscription::factory()->create(['name' => 'VPN']);
+
+        UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $oldSubscription->id,
+            'action' => 'create',
+            'price' => 5000,
+            'is_processed' => false,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(10)->toDateString(),
+            'file_path' => 'files/' . $user->id . '_41_' . $oldServer->id . '_01_03_2026_12_00/' . $user->id . '_41_' . $oldServer->id . '_01_03_2026_12_00.zip',
+            'server_id' => $oldServer->id,
+        ]);
+
+        $current = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $newSubscription->id,
+            'action' => 'activate',
+            'price' => 5000,
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(20)->toDateString(),
+            'file_path' => 'files/' . $user->id . '_41_' . $newServer->id . '_02_03_2026_12_00/' . $user->id . '_41_' . $newServer->id . '_02_03_2026_12_00.zip',
+            'server_id' => $newServer->id,
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.subscriptions.index'));
+
+        $response->assertOk();
+
+        $rows = $response->viewData('userSubscriptions');
+
+        $this->assertCount(1, $rows);
+        $this->assertSame((int) $current->id, (int) $rows->first()->id);
+    }
 }

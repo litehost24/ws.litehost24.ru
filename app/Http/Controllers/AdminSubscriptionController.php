@@ -59,13 +59,14 @@ class AdminSubscriptionController extends Controller
             $sortOrder = 'desc';
         }
 
-        $latestUserSubscriptionsQuery = UserSubscription::whereIn('user_subscriptions.id', function($query) {
-            $query->select(DB::raw('MAX(id)'))
-                  ->from('user_subscriptions')
-                  ->groupBy('user_id', 'subscription_id');
-        })->with(['user' => function ($query) {
-            $query->withCount('referrals');
-        }, 'user.referrer', 'subscription']);
+        $displayRowIdsQuery = UserSubscription::query()
+            ->select(DB::raw('COALESCE(MAX(CASE WHEN is_processed = 1 THEN id END), MAX(id))'))
+            ->groupBy('user_id', 'subscription_id');
+
+        $latestUserSubscriptionsQuery = UserSubscription::whereIn('user_subscriptions.id', $displayRowIdsQuery)
+            ->with(['user' => function ($query) {
+                $query->withCount('referrals');
+            }, 'user.referrer', 'subscription']);
 
         if ($sortBy === 'user.name') {
             $latestUserSubscriptionsQuery->join('users', 'user_subscriptions.user_id', '=', 'users.id')
@@ -430,14 +431,14 @@ class AdminSubscriptionController extends Controller
     private function subscriptionPeerDisplayKey(UserSubscription $subscription): ?string
     {
         $userId = (int) ($subscription->user_id ?? 0);
-        $serverId = (int) ($subscription->resolved_server_id ?? 0);
         $peerName = trim((string) ($subscription->peer_name ?? ''));
 
-        if ($userId <= 0 || $serverId <= 0 || $peerName === '') {
+        if ($userId <= 0 || $peerName === '') {
             return null;
         }
 
-        return $userId . ':' . $serverId . ':' . $peerName;
+        // One logical device keeps the same peer name even if it was moved between servers.
+        return $userId . ':' . $peerName;
     }
 
     /**
