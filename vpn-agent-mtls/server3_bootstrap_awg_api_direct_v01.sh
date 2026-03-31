@@ -896,6 +896,7 @@ fi
 cat >/usr/local/bin/vpn-agent <<'PY'
 #!/usr/bin/env python3
 import json
+import os
 import subprocess
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -1008,6 +1009,51 @@ def read_memory() -> dict:
     except Exception:
         return {}
 
+def read_swap() -> dict:
+    values = {}
+    try:
+        with open("/proc/meminfo", "r", encoding="utf-8") as fh:
+            for line in fh:
+                key, _, raw = line.partition(":")
+                values[key.strip()] = raw.strip()
+        total_kb = int(values.get("SwapTotal", "0 kB").split()[0])
+        free_kb = int(values.get("SwapFree", "0 kB").split()[0])
+        used_kb = max(0, total_kb - free_kb)
+        used_percent = round((used_kb / total_kb) * 100, 2) if total_kb > 0 else 0.0
+        return {
+            "total_bytes": total_kb * 1024,
+            "free_bytes": free_kb * 1024,
+            "used_bytes": used_kb * 1024,
+            "used_percent": used_percent,
+        }
+    except Exception:
+        return {}
+
+def read_disk(path: str = "/") -> dict:
+    try:
+        stat = os.statvfs(path)
+        total_bytes = int(stat.f_frsize * stat.f_blocks)
+        free_bytes = int(stat.f_frsize * stat.f_bavail)
+        used_bytes = max(0, total_bytes - free_bytes)
+        used_percent = round((used_bytes / total_bytes) * 100, 2) if total_bytes > 0 else 0.0
+        return {
+            "path": path,
+            "total_bytes": total_bytes,
+            "free_bytes": free_bytes,
+            "used_bytes": used_bytes,
+            "used_percent": used_percent,
+        }
+    except Exception:
+        return {}
+
+def read_uptime_seconds() -> int | None:
+    try:
+        with open("/proc/uptime", "r", encoding="utf-8") as fh:
+            value = fh.read().strip().split()[0]
+        return int(float(value))
+    except Exception:
+        return None
+
 def read_cpu_sample():
     with open("/proc/stat", "r", encoding="utf-8") as fh:
         for line in fh:
@@ -1066,8 +1112,11 @@ def system_metrics() -> dict:
     return {
         "ok": True,
         "collected_at": int(time.time()),
+        "uptime_seconds": read_uptime_seconds(),
         "load": read_loadavg(),
         "memory": read_memory(),
+        "swap": read_swap(),
+        "disk": read_disk("/"),
         "cpu": sample_cpu(),
         "interfaces": read_interfaces(),
     }

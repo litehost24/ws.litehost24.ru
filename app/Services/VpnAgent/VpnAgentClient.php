@@ -143,7 +143,7 @@ class VpnAgentClient
     }
 
     /**
-     * @return array{ok: bool, collected_at?: int, load?: array<string, mixed>, memory?: array<string, mixed>, cpu?: array<string, mixed>, interfaces?: array<int, array<string, mixed>>, error?: string}
+     * @return array{ok: bool, collected_at?: int, uptime_seconds?: int, load?: array<string, mixed>, memory?: array<string, mixed>, swap?: array<string, mixed>, disk?: array<string, mixed>, cpu?: array<string, mixed>, interfaces?: array<int, array<string, mixed>>, error?: string}
      * @throws Exception
      */
     public function systemMetrics(): array

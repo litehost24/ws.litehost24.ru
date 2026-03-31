@@ -8,6 +8,7 @@ use App\Services\VpnAgent\VpnAgentClient;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class CollectServerMetrics extends Command
 {
@@ -78,10 +79,12 @@ class CollectServerMetrics extends Command
         $interfaces = $this->normalizeInterfaces($payload['interfaces'] ?? []);
         $rates = $this->calculateRates($metric->counters, $metric->collected_at, $interfaces, $collectedAt);
         $memory = is_array($payload['memory'] ?? null) ? $payload['memory'] : [];
+        $swap = is_array($payload['swap'] ?? null) ? $payload['swap'] : [];
+        $disk = is_array($payload['disk'] ?? null) ? $payload['disk'] : [];
         $load = is_array($payload['load'] ?? null) ? $payload['load'] : [];
         $cpu = is_array($payload['cpu'] ?? null) ? $payload['cpu'] : [];
 
-        $metric->fill([
+        $update = [
             'ok' => true,
             'error_message' => null,
             'collected_at' => $collectedAt,
@@ -95,7 +98,25 @@ class CollectServerMetrics extends Command
             'memory_used_bytes' => $this->toNullableInt($memory['used_bytes'] ?? null),
             'counters' => $interfaces,
             'rates' => $rates,
-        ])->save();
+        ];
+
+        $optionalColumns = [
+            'uptime_seconds' => $this->toNullableInt($payload['uptime_seconds'] ?? $payload['uptime_sec'] ?? null),
+            'swap_used_percent' => $this->toNullableFloat($swap['used_percent'] ?? null),
+            'swap_total_bytes' => $this->toNullableInt($swap['total_bytes'] ?? null),
+            'swap_used_bytes' => $this->toNullableInt($swap['used_bytes'] ?? null),
+            'disk_used_percent' => $this->toNullableFloat($disk['used_percent'] ?? null),
+            'disk_total_bytes' => $this->toNullableInt($disk['total_bytes'] ?? null),
+            'disk_used_bytes' => $this->toNullableInt($disk['used_bytes'] ?? null),
+        ];
+
+        foreach ($optionalColumns as $column => $value) {
+            if (Schema::hasColumn('server_node_metrics', $column)) {
+                $update[$column] = $value;
+            }
+        }
+
+        $metric->fill($update)->save();
     }
 
     /**

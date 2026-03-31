@@ -36,8 +36,8 @@ class ServerCurrentBundleSettingsTest extends TestCase
             ->get(route('servers.index'))
             ->assertOk()
             ->assertSee('Какие серверы выдаём новым подпискам')
-            ->assertSee('Подписки с белым IP')
-            ->assertSee('Обычные подписки');
+            ->assertSee('Подключение при ограничениях')
+            ->assertSee('Обычное подключение');
     }
 
     public function test_admin_can_save_current_bundle_server_ids(): void

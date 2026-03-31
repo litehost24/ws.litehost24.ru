@@ -206,6 +206,81 @@
 
                                         return number_format((float) $value, 2, '.', ' ') . ' Mbps';
                                     };
+                                    $fmtBytes = function ($bytes) {
+                                        if ($bytes === null || !is_numeric($bytes) || (int) $bytes <= 0) {
+                                            return '-';
+                                        }
+
+                                        $value = (float) $bytes;
+                                        $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+                                        $unitIndex = 0;
+                                        while ($value >= 1024 && $unitIndex < count($units) - 1) {
+                                            $value /= 1024;
+                                            $unitIndex++;
+                                        }
+
+                                        return number_format($value, $unitIndex === 0 ? 0 : 1, '.', ' ') . ' ' . $units[$unitIndex];
+                                    };
+                                    $fmtMetricAge = function ($collectedAt) {
+                                        if (!$collectedAt) {
+                                            return '-';
+                                        }
+
+                                        try {
+                                            $diffMinutes = max(0, \Illuminate\Support\Carbon::now()->diffInMinutes($collectedAt));
+                                        } catch (\Throwable) {
+                                            return '-';
+                                        }
+
+                                        if ($diffMinutes < 1) {
+                                            return '< 1 мин';
+                                        }
+
+                                        if ($diffMinutes < 60) {
+                                            return $diffMinutes . ' мин';
+                                        }
+
+                                        $hours = intdiv($diffMinutes, 60);
+                                        $minutes = $diffMinutes % 60;
+
+                                        return $hours . 'ч ' . str_pad((string) $minutes, 2, '0', STR_PAD_LEFT) . 'м';
+                                    };
+                                    $fmtUptime = function ($seconds) {
+                                        if ($seconds === null || !is_numeric($seconds) || (int) $seconds < 0) {
+                                            return '-';
+                                        }
+
+                                        $seconds = (int) $seconds;
+                                        $days = intdiv($seconds, 86400);
+                                        $hours = intdiv($seconds % 86400, 3600);
+                                        $minutes = intdiv($seconds % 3600, 60);
+
+                                        if ($days > 0) {
+                                            return $days . 'д ' . str_pad((string) $hours, 2, '0', STR_PAD_LEFT) . 'ч ' . str_pad((string) $minutes, 2, '0', STR_PAD_LEFT) . 'м';
+                                        }
+
+                                        if ($hours > 0) {
+                                            return $hours . 'ч ' . str_pad((string) $minutes, 2, '0', STR_PAD_LEFT) . 'м';
+                                        }
+
+                                        return max(0, $minutes) . 'м';
+                                    };
+                                    $metricValueClass = function ($value, float $warn, float $critical) {
+                                        if ($value === null || !is_numeric($value)) {
+                                            return 'text-gray-400';
+                                        }
+
+                                        $value = (float) $value;
+                                        if ($value >= $critical) {
+                                            return 'text-red-700 font-semibold';
+                                        }
+
+                                        if ($value >= $warn) {
+                                            return 'text-amber-700 font-semibold';
+                                        }
+
+                                        return 'text-emerald-700';
+                                    };
                                 @endphp
 
                                 <div class="mb-2 rounded bg-white px-2 py-1">
@@ -246,36 +321,131 @@
                                     &#1056;&#1077;&#1078;&#1080;&#1084;: -
                                 </div>
 
-                                <div class="mt-3 rounded bg-white px-2 py-2 text-[11px] text-gray-700">
-                                    <div class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Node 1 Metrics</div>
-                                    @if ($metric)
-                                        @if (!$metric->ok)
-                                            <div class="text-amber-600">
-                                                Metric collection failed: {{ $metric->error_message ?: 'unknown' }}
-                                            </div>
-                                            <div class="mt-2 text-[10px] text-gray-400">
-                                                {{ $metric->collected_at?->format('Y-m-d H:i') ?? '-' }}
-                                            </div>
-                                        @else
-                                            <div class="flex items-center justify-between gap-3">
-                                                <span class="text-gray-500">CPU / IOWait</span>
-                                                <span class="text-right">
+                                    <div class="mt-3 rounded bg-white px-2 py-2 text-[11px] text-gray-700">
+                                        <div class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Node 1 Metrics</div>
+                                        @php
+                                            $metricAgeMinutes = null;
+                                            if ($metric?->collected_at) {
+                                                try {
+                                                    $metricAgeMinutes = max(0, \Illuminate\Support\Carbon::now()->diffInMinutes($metric->collected_at));
+                                                } catch (\Throwable) {
+                                                    $metricAgeMinutes = null;
+                                                }
+                                            }
+
+                                            $metricIsStale = $metric && $metric->ok && $metricAgeMinutes !== null && $metricAgeMinutes >= 15;
+                                            $metricHealth = [
+                                                'label' => 'NO DATA',
+                                                'classes' => 'bg-gray-100 text-gray-700',
+                                            ];
+
+                                            if ($metric && !$metric->ok) {
+                                                $metricHealth = [
+                                                    'label' => 'ERROR',
+                                                    'classes' => 'bg-red-100 text-red-800',
+                                                ];
+                                            } elseif ($metric && $metricIsStale) {
+                                                $metricHealth = [
+                                                    'label' => 'STALE',
+                                                    'classes' => 'bg-slate-100 text-slate-700',
+                                                ];
+                                            } elseif ($metric && $metric->ok) {
+                                                $severity = 0;
+                                                foreach ([
+                                                    [(float) ($metric->cpu_usage_percent ?? 0), 75.0, 90.0],
+                                                    [(float) ($metric->cpu_iowait_percent ?? 0), 15.0, 30.0],
+                                                    [(float) ($metric->memory_used_percent ?? 0), 75.0, 90.0],
+                                                    [(float) ($metric->swap_used_percent ?? 0), 35.0, 60.0],
+                                                    [(float) ($metric->disk_used_percent ?? 0), 80.0, 92.0],
+                                                    [(float) ($metric->load1 ?? 0), 4.0, 8.0],
+                                                ] as [$metricValue, $warnAt, $criticalAt]) {
+                                                    if ($metricValue >= $criticalAt) {
+                                                        $severity = max($severity, 2);
+                                                    } elseif ($metricValue >= $warnAt) {
+                                                        $severity = max($severity, 1);
+                                                    }
+                                                }
+
+                                                if ($severity === 2) {
+                                                    $metricHealth = [
+                                                        'label' => 'CRITICAL',
+                                                        'classes' => 'bg-red-100 text-red-800',
+                                                    ];
+                                                } elseif ($severity === 1) {
+                                                    $metricHealth = [
+                                                        'label' => 'WARNING',
+                                                        'classes' => 'bg-amber-100 text-amber-800',
+                                                    ];
+                                                } else {
+                                                    $metricHealth = [
+                                                        'label' => 'OK',
+                                                        'classes' => 'bg-emerald-100 text-emerald-800',
+                                                    ];
+                                                }
+                                            }
+                                        @endphp
+                                        @if ($metric)
+                                            @if (!$metric->ok)
+                                                <div class="mb-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider {{ $metricHealth['classes'] }}">
+                                                    {{ $metricHealth['label'] }}
+                                                </div>
+                                                <div class="text-amber-600">
+                                                    Metric collection failed: {{ $metric->error_message ?: 'unknown' }}
+                                                </div>
+                                                <div class="mt-2 text-[10px] text-gray-400">
+                                                    {{ $metric->collected_at?->format('Y-m-d H:i') ?? '-' }}
+                                                </div>
+                                            @else
+                                                <div class="mb-2 flex items-center justify-between gap-3">
+                                                    <div class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider {{ $metricHealth['classes'] }}">
+                                                        {{ $metricHealth['label'] }}
+                                                    </div>
+                                                    <div class="text-[10px] text-gray-400">
+                                                        Возраст: {{ $fmtMetricAge($metric->collected_at) }}
+                                                    </div>
+                                                </div>
+                                                <div class="flex items-center justify-between gap-3">
+                                                    <span class="text-gray-500">Uptime</span>
+                                                    <span class="text-right">{{ $fmtUptime($metric->uptime_seconds) }}</span>
+                                                </div>
+                                                <div class="flex items-center justify-between gap-3">
+                                                    <span class="text-gray-500">CPU / IOWait</span>
+                                                    <span class="text-right {{ $metricValueClass($metric->cpu_usage_percent, 75.0, 90.0) }}">
                                                     {{ $metric->cpu_usage_percent !== null ? number_format((float) $metric->cpu_usage_percent, 1, '.', ' ') . '%' : '-' }}
                                                     /
-                                                    {{ $metric->cpu_iowait_percent !== null ? number_format((float) $metric->cpu_iowait_percent, 1, '.', ' ') . '%' : '-' }}
+                                                    <span class="{{ $metricValueClass($metric->cpu_iowait_percent, 15.0, 30.0) }}">
+                                                        {{ $metric->cpu_iowait_percent !== null ? number_format((float) $metric->cpu_iowait_percent, 1, '.', ' ') . '%' : '-' }}
+                                                    </span>
                                                 </span>
                                             </div>
                                             <div class="mt-1 flex items-center justify-between gap-3">
                                                 <span class="text-gray-500">RAM</span>
-                                                <span class="text-right">
+                                                <span class="text-right {{ $metricValueClass($metric->memory_used_percent, 75.0, 90.0) }}">
                                                     {{ $metric->memory_used_percent !== null ? number_format((float) $metric->memory_used_percent, 1, '.', ' ') . '%' : '-' }}
                                                 </span>
                                             </div>
                                             <div class="mt-1 flex items-center justify-between gap-3">
-                                                <span class="text-gray-500">Load</span>
-                                                <span class="text-right">
+                                                <span class="text-gray-500">Swap</span>
+                                                <span class="text-right {{ $metricValueClass($metric->swap_used_percent, 35.0, 60.0) }}">
+                                                    {{ $metric->swap_used_percent !== null ? number_format((float) $metric->swap_used_percent, 1, '.', ' ') . '%' : '-' }}
+                                                </span>
+                                            </div>
+                                            <div class="mt-1 flex items-center justify-between gap-3">
+                                                <span class="text-gray-500">Disk /</span>
+                                                <span class="text-right {{ $metricValueClass($metric->disk_used_percent, 80.0, 92.0) }}">
+                                                    {{ $metric->disk_used_percent !== null ? number_format((float) $metric->disk_used_percent, 1, '.', ' ') . '%' : '-' }}
+                                                </span>
+                                            </div>
+                                            <div class="mt-1 flex items-center justify-between gap-3">
+                                                <span class="text-gray-500">Load 1m</span>
+                                                <span class="text-right {{ $metricValueClass($metric->load1, 4.0, 8.0) }}">
                                                     {{ $metric->load1 !== null ? number_format((float) $metric->load1, 2, '.', ' ') : '-' }}
                                                 </span>
+                                            </div>
+                                            <div class="mt-1 text-[10px] text-gray-400">
+                                                RAM {{ $fmtBytes($metric->memory_used_bytes) }} / {{ $fmtBytes($metric->memory_total_bytes) }}
+                                                · Swap {{ $fmtBytes($metric->swap_used_bytes) }} / {{ $fmtBytes($metric->swap_total_bytes) }}
+                                                · Disk {{ $fmtBytes($metric->disk_used_bytes) }} / {{ $fmtBytes($metric->disk_total_bytes) }}
                                             </div>
                                             <div class="mt-2 border-t border-gray-100 pt-2">
                                                 <div class="flex items-center justify-between gap-3">
