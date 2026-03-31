@@ -471,14 +471,19 @@ class UserSubscription extends Model
 
     public function cabinetDeviceKey(): string
     {
+        $resolvedServerId = $this->resolveServerId();
+        $peerName = trim((string) VpnPeerName::fromSubscription($this, $resolvedServerId));
+        if ($resolvedServerId !== null && $peerName !== '') {
+            return 'peer:' . $resolvedServerId . ':' . $peerName;
+        }
+
+        if ($peerName !== '') {
+            return 'peer:' . $peerName;
+        }
+
         $filePath = trim((string) ($this->file_path ?? ''));
         if ($filePath !== '') {
             return 'file:' . $filePath;
-        }
-
-        $peerName = VpnPeerName::fromSubscription($this);
-        if (!empty($peerName)) {
-            return 'peer:' . $peerName;
         }
 
         $config = trim((string) ($this->connection_config ?? ''));

@@ -144,6 +144,8 @@ class AdminSubscriptionController extends Controller
             $userSub->peer_name = VpnPeerName::fromSubscription($userSub, $resolvedServerId);
         }
 
+        $latestUserSubscriptions = $this->collapseDuplicatePeerRows($latestUserSubscriptions);
+
         $historyServerIdsByPairPeer = collect([]);
         $pairKeys = $latestUserSubscriptions
             ->map(function ($subscription) {
@@ -372,6 +374,47 @@ class AdminSubscriptionController extends Controller
             'userEndpointNetworksByUserId' => $userEndpointNetworksByUserId,
             'userEndpointNetworkSummary' => $userEndpointNetworkSummary,
         ]);
+    }
+
+    private function collapseDuplicatePeerRows(Collection $subscriptions): Collection
+    {
+        $latestIdByPeerKey = [];
+
+        foreach ($subscriptions as $subscription) {
+            $peerKey = $this->subscriptionPeerDisplayKey($subscription);
+            if ($peerKey === null) {
+                continue;
+            }
+
+            $currentId = (int) ($subscription->id ?? 0);
+            if (!isset($latestIdByPeerKey[$peerKey]) || $currentId > $latestIdByPeerKey[$peerKey]) {
+                $latestIdByPeerKey[$peerKey] = $currentId;
+            }
+        }
+
+        return $subscriptions
+            ->filter(function (UserSubscription $subscription) use ($latestIdByPeerKey) {
+                $peerKey = $this->subscriptionPeerDisplayKey($subscription);
+                if ($peerKey === null) {
+                    return true;
+                }
+
+                return (int) ($subscription->id ?? 0) === (int) ($latestIdByPeerKey[$peerKey] ?? 0);
+            })
+            ->values();
+    }
+
+    private function subscriptionPeerDisplayKey(UserSubscription $subscription): ?string
+    {
+        $userId = (int) ($subscription->user_id ?? 0);
+        $serverId = (int) ($subscription->resolved_server_id ?? 0);
+        $peerName = trim((string) ($subscription->peer_name ?? ''));
+
+        if ($userId <= 0 || $serverId <= 0 || $peerName === '') {
+            return null;
+        }
+
+        return $userId . ':' . $serverId . ':' . $peerName;
     }
 
     /**
