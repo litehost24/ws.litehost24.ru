@@ -56,6 +56,7 @@ class UserSubscription extends Model
         'vpn_plan_code',
         'vpn_plan_name',
         'vpn_traffic_limit_bytes',
+        'next_vpn_plan_code',
         'pending_vpn_access_mode_source_server_id',
         'pending_vpn_access_mode_source_peer_name',
         'pending_vpn_access_mode_disconnect_at',
@@ -551,9 +552,29 @@ class UserSubscription extends Model
         return app(VpnPlanCatalog::class)->find($planCode);
     }
 
+    public function isLegacyVpnPlan(): bool
+    {
+        return trim((string) ($this->vpn_plan_code ?? '')) === '';
+    }
+
     public function vpnPlanLabel(): ?string
     {
         return app(VpnPlanCatalog::class)->displayLabelForUserSubscription($this);
+    }
+
+    public function nextVpnPlan(): ?array
+    {
+        $planCode = trim((string) ($this->next_vpn_plan_code ?? ''));
+        if ($planCode === '') {
+            return null;
+        }
+
+        return app(VpnPlanCatalog::class)->find($planCode);
+    }
+
+    public function nextVpnPlanLabel(): ?string
+    {
+        return $this->nextVpnPlan()['label'] ?? null;
     }
 
     public function vpnTrafficLimitBytes(): ?int

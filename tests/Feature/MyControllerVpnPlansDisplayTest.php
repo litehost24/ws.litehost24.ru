@@ -127,5 +127,8 @@ class MyControllerVpnPlansDisplayTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Переключить на обычное подключение', false);
+        $response->assertSee('Старый тариф', false);
+        $response->assertSee('Этот тариф больше не оформляется.', false);
+        $response->assertSee('Выбрать новый тариф со следующего периода', false);
     }
 }

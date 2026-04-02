@@ -590,6 +590,89 @@ class UserSubscriptionController extends Controller
         return redirect()->back()->with('subscription-success', $message);
     }
 
+    public function scheduleNextVpnPlan(Request $request): RedirectResponse|JsonResponse
+    {
+        if (!in_array(Auth::user()->role, ['user', 'admin', 'partner'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Выбор тарифа недоступен.'], 403, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Выбор тарифа недоступен.');
+        }
+
+        $data = $request->validate([
+            'user_subscription_id' => ['required', 'integer', 'min:1'],
+            'vpn_plan_code' => ['required', 'string', 'max:64'],
+        ]);
+
+        $userSub = $this->findVisibleUserSubscription((int) $data['user_subscription_id']);
+        if (!$userSub) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Подписка не найдена.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Подписка не найдена.');
+        }
+
+        $subscription = $userSub->subscription;
+        if (!$subscription || trim((string) $subscription->name) !== 'VPN') {
+            $message = 'Выбор следующего тарифа доступен только для VPN-подписки.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
+        if (!$userSub->isLocallyActive()) {
+            $message = 'Выбрать новый тариф можно только для активной подписки.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
+        if (!$userSub->isLegacyVpnPlan()) {
+            $message = 'Для нового тарифа выбор на следующий период не требуется.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
+        $catalog = app(VpnPlanCatalog::class);
+        $planCode = $catalog->normalizePlanCode((string) $data['vpn_plan_code']);
+        $plan = $catalog->find($planCode);
+
+        if ($plan === null) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Тариф не найден.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Тариф не найден.');
+        }
+
+        $userSub->update([
+            'next_vpn_plan_code' => $planCode,
+        ]);
+
+        $message = sprintf(
+            'Со следующего периода будет: %s. Текущий тариф продолжит работать до конца оплаченного периода.',
+            (string) ($plan['label'] ?? $planCode)
+        );
+
+        if ($request->expectsJson()) {
+            return $this->subscriptionCardJson($subscription, $message, (int) $userSub->id);
+        }
+
+        return redirect()->back()->with('subscription-success', $message);
+    }
+
     public function toggleRebill(): RedirectResponse|JsonResponse
     {
         $subId = request()->get('id');

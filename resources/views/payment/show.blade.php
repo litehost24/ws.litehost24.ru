@@ -674,13 +674,109 @@
         margin-right: 8px;
         flex: 0 0 auto;
     }
+    .service-block__legacy-plan {
+        width: 100%;
+        margin-top: 14px;
+        padding: 14px;
+        border: 1px solid #d7dee8;
+        border-radius: 14px;
+        background: linear-gradient(180deg, #fbfcfe 0%, #f2f5f9 100%);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    }
+    .service-block__legacy-plan-head {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .service-block__legacy-plan-badge {
+        display: inline-flex;
+        align-self: flex-start;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #fff1f2;
+        color: #be123c;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: .01em;
+    }
+    .service-block__legacy-plan-title {
+        color: #0f172a;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+    .service-block__legacy-plan-next {
+        color: #475569;
+        font-size: 12px;
+        line-height: 1.45;
+    }
+    .service-block__legacy-plan-details {
+        margin-top: 12px;
+    }
+    .service-block__legacy-plan-summary {
+        cursor: pointer;
+        list-style: none;
+        color: #1d4ed8;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+    .service-block__legacy-plan-summary::-webkit-details-marker {
+        display: none;
+    }
+    .service-block__legacy-plan-body {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #dbe4ee;
+    }
+    .service-block__legacy-plan-hint {
+        margin-bottom: 10px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.45;
+    }
+    .service-block__legacy-plan-form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: flex-end;
+    }
+    .service-block__legacy-plan-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+        flex: 1 1 260px;
+    }
+    .service-block__legacy-plan-label {
+        color: #475569;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.3;
+    }
+    .service-block__legacy-plan-select {
+        width: 100%;
+        min-height: 42px;
+        padding: 0 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #fff;
+        color: #0f172a;
+        font-size: 13px;
+        line-height: 1.3;
+    }
+    .service-block__legacy-plan-submit {
+        min-height: 42px;
+        white-space: nowrap;
+    }
     .service-block__topup {
         width: 100%;
         margin-top: 14px;
         padding: 14px;
-        border: 1px solid #dbe3ef;
+        border: 1px solid #d4deea;
         border-radius: 14px;
-        background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
+        background: linear-gradient(180deg, #f7fbff 0%, #edf4fb 100%);
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
     }
     .service-block__topup-title {
@@ -712,7 +808,7 @@
     .service-block__topup-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
+        gap: 8px;
         margin-top: 12px;
     }
     .service-block__topup-form {
@@ -724,8 +820,8 @@
         justify-content: space-between;
         gap: 10px;
         width: 100%;
-        min-height: 42px;
-        padding: 0 14px;
+        min-height: 44px;
+        padding: 0 12px;
         border: 1px solid #d1d5db;
         border-radius: 10px;
         background: #f9fafb;
@@ -738,6 +834,24 @@
         border-color: #93c5fd;
         background: #eff6ff;
         color: #1d4ed8;
+    }
+    .service-block__topup-btn-label {
+        display: inline-flex;
+        align-items: center;
+        min-width: 0;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 700;
+        color: inherit;
+    }
+    .service-block__topup-btn-price {
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: 800;
+        color: inherit;
+        flex: 0 0 auto;
     }
     .service-block__status--traffic {
         margin-left: auto;
@@ -855,6 +969,14 @@
         .service-block__status--traffic {
             margin-left: 0;
             text-align: left;
+        }
+        .service-block__legacy-plan-form {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .service-block__legacy-plan-submit {
+            width: 100%;
+            justify-content: center;
         }
         .service-block__topup-grid {
             grid-template-columns: 1fr;

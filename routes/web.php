@@ -95,6 +95,7 @@ Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified']
         ->name('user-subscription.download-amneziawg');
     Route::get('/user-subscription/instruction', [UserSubscriptionController::class, 'instruction'])->name('user-subscription.instruction');
     Route::post('/user-subscription/add-vpn', [UserSubscriptionController::class, 'addVpn'])->name('user-subscription.add-vpn');
+    Route::post('/user-subscription/next-vpn-plan', [UserSubscriptionController::class, 'scheduleNextVpnPlan'])->name('user-subscription.next-vpn-plan');
     Route::post('/user-subscription/topup', [UserSubscriptionController::class, 'purchaseTopup'])->name('user-subscription.topup');
     Route::post('/user-subscription/update-note', [UserSubscriptionController::class, 'updateNote'])->name('user-subscription.update-note');
     Route::get('/user-subscriptions-manage', [UserSubscriptionController::class, 'manage'])->name('user-subscriptions-manage');

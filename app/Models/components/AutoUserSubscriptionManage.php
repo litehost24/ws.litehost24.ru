@@ -143,13 +143,17 @@ class AutoUserSubscriptionManage
 
         $subscription = $subs->firstWhere('id', $userSub->subscription_id);
         $subscriptionName = $subscription ? $subscription->name : 'Unknown';
-        $subscriptionPrice = $subscription ? $this->resolveBasePriceCents($subscription, $userSub) : (int) $userSub->price;
+        $renewalContext = $this->prepareRenewalContext($userSub, $subscription);
+        $basePrice = $subscription
+            ? $this->resolveBasePriceCentsFromPlanSnapshot($subscription, $renewalContext['plan_snapshot'])
+            : (int) $userSub->price;
+        $subscriptionPrice = $basePrice;
 
         $pricing = app(ReferralPricingService::class);
         $referral = User::query()->find((int) $userSub->user_id);
         $referrer = $referral?->referrer;
         if ($subscription && $referral) {
-            $subscriptionPrice = $pricing->getFinalPriceCents($subscription, $referrer, $referral, $subscriptionPrice);
+            $subscriptionPrice = $pricing->getFinalPriceCents($subscription, $referrer, $referral, $basePrice);
         }
 
         $newSubscription = UserSubscription::create([
@@ -161,18 +165,32 @@ class AutoUserSubscriptionManage
             'is_processed' => true,
             'is_rebilling' => true,
             'end_date' => UserSubscription::nextMonthlyEndDate($userSub->end_date),
-            'file_path' => $userSub->file_path,
+            'file_path' => $renewalContext['file_path'],
             'connection_config' => $userSub->connection_config ?? null,
-            'server_id' => $userSub->server_id ?? null,
-            'vpn_access_mode' => $userSub->vpn_access_mode ?? null,
-            'vpn_plan_code' => $userSub->vpn_plan_code ?? null,
-            'vpn_plan_name' => $userSub->vpn_plan_name ?? null,
-            'vpn_traffic_limit_bytes' => $userSub->vpn_traffic_limit_bytes ?? null,
+            'server_id' => $renewalContext['server_id'],
+            'vpn_access_mode' => $renewalContext['vpn_access_mode'],
+            'vpn_plan_code' => $renewalContext['plan_snapshot']['vpn_plan_code'] ?? null,
+            'vpn_plan_name' => $renewalContext['plan_snapshot']['vpn_plan_name'] ?? null,
+            'vpn_traffic_limit_bytes' => $renewalContext['plan_snapshot']['vpn_traffic_limit_bytes'] ?? null,
+            'next_vpn_plan_code' => $renewalContext['carry_next_vpn_plan_code'],
             'note' => $userSub->note ?? null,
         ]);
 
+        if (($renewalContext['new_server'] ?? null) instanceof Server && trim((string) ($renewalContext['new_peer_name'] ?? '')) !== '') {
+            $this->peerOperator()->syncServerState(
+                $renewalContext['new_server'],
+                (string) $renewalContext['new_peer_name'],
+                'enabled',
+                (int) $userSub->user_id
+            );
+        }
+
+        if ((bool) ($renewalContext['disable_previous'] ?? false)) {
+            $this->disableExistingBundlePeer($userSub);
+        }
+
         if ($subscription && $newSubscription && $referral) {
-            $pricing->applyEarning($newSubscription, $subscription, $referrer, $referral, $this->resolveBasePriceCents($subscription, $userSub));
+            $pricing->applyEarning($newSubscription, $subscription, $referrer, $referral, $basePrice);
         }
     }
 
@@ -239,14 +257,18 @@ class AutoUserSubscriptionManage
         Log::info("Processing activation for await payment subscription ID: {$awaitSub->id}");
 
         $subscription = $subs->firstWhere('id', $awaitSub->subscription_id);
-        $subscriptionPrice = $subscription ? $this->resolveBasePriceCents($subscription, $awaitSub) : (int) $awaitSub->price;
+        $renewalContext = $this->prepareRenewalContext($awaitSub, $subscription);
+        $basePrice = $subscription
+            ? $this->resolveBasePriceCentsFromPlanSnapshot($subscription, $renewalContext['plan_snapshot'])
+            : (int) $awaitSub->price;
+        $subscriptionPrice = $basePrice;
         $subscriptionName = $subscription ? $subscription->name : $awaitSub->name;
 
         $pricing = app(ReferralPricingService::class);
         $referral = User::query()->find((int) $awaitSub->user_id);
         $referrer = $referral?->referrer;
         if ($subscription && $referral) {
-            $subscriptionPrice = $pricing->getFinalPriceCents($subscription, $referrer, $referral, $subscriptionPrice);
+            $subscriptionPrice = $pricing->getFinalPriceCents($subscription, $referrer, $referral, $basePrice);
         }
 
         $created = UserSubscription::create([
@@ -258,18 +280,34 @@ class AutoUserSubscriptionManage
             'is_processed' => true,
             'is_rebilling' => true,
             'end_date' => UserSubscription::nextMonthlyEndDate(Carbon::today()->toDateString()),
-            'file_path' => $awaitSub->file_path,
+            'file_path' => $renewalContext['file_path'],
             'connection_config' => $awaitSub->connection_config ?? null,
-            'server_id' => $awaitSub->server_id ?? null,
-            'vpn_access_mode' => $awaitSub->vpn_access_mode ?? null,
-            'vpn_plan_code' => $awaitSub->vpn_plan_code ?? null,
-            'vpn_plan_name' => $awaitSub->vpn_plan_name ?? null,
-            'vpn_traffic_limit_bytes' => $awaitSub->vpn_traffic_limit_bytes ?? null,
+            'server_id' => $renewalContext['server_id'],
+            'vpn_access_mode' => $renewalContext['vpn_access_mode'],
+            'vpn_plan_code' => $renewalContext['plan_snapshot']['vpn_plan_code'] ?? null,
+            'vpn_plan_name' => $renewalContext['plan_snapshot']['vpn_plan_name'] ?? null,
+            'vpn_traffic_limit_bytes' => $renewalContext['plan_snapshot']['vpn_traffic_limit_bytes'] ?? null,
+            'next_vpn_plan_code' => $renewalContext['carry_next_vpn_plan_code'],
             'note' => $awaitSub->note ?? null,
         ]);
 
         if ($subscription && $created && $referral) {
-            $pricing->applyEarning($created, $subscription, $referrer, $referral, $this->resolveBasePriceCents($subscription, $awaitSub));
+            $pricing->applyEarning($created, $subscription, $referrer, $referral, $basePrice);
+        }
+
+        if (($renewalContext['new_server'] ?? null) instanceof Server && trim((string) ($renewalContext['new_peer_name'] ?? '')) !== '') {
+            $this->peerOperator()->syncServerState(
+                $renewalContext['new_server'],
+                (string) $renewalContext['new_peer_name'],
+                'enabled',
+                (int) $awaitSub->user_id
+            );
+            if ((bool) ($renewalContext['disable_previous'] ?? false)) {
+                $this->disableExistingBundlePeer($awaitSub);
+            }
+
+            Log::info("Activated subscription ID: {$awaitSub->id} for user_id: {$awaitSub->user_id}");
+            return;
         }
 
         [$meta, $server] = $this->resolveBundleServerTarget($awaitSub->file_path ?? null);
@@ -313,7 +351,15 @@ class AutoUserSubscriptionManage
         $referrer = $referral?->referrer;
         if ($subscription && $referral) {
             $pricing = app(ReferralPricingService::class);
-            $price = $pricing->getFinalPriceCents($subscription, $referrer, $referral, $this->resolveBasePriceCents($subscription, $userSub));
+            $price = $pricing->getFinalPriceCents(
+                $subscription,
+                $referrer,
+                $referral,
+                $this->resolveBasePriceCentsFromPlanSnapshot(
+                    $subscription,
+                    $this->resolveIntendedRenewalPlanSnapshot($subscription, $userSub)
+                )
+            );
         }
 
         \Log::info("Checking balance: user_id={$userSub->user_id}, balance=$balance, price=$price");
@@ -428,11 +474,182 @@ class AutoUserSubscriptionManage
         return app(SubscriptionPeerOperator::class);
     }
 
-    private function resolveBasePriceCents(Subscription $subscription, object $userSub): int
+    private function currentPlanSnapshot(object $userSub): array
+    {
+        return [
+            'vpn_plan_code' => trim((string) ($userSub->vpn_plan_code ?? '')) !== '' ? (string) $userSub->vpn_plan_code : null,
+            'vpn_plan_name' => trim((string) ($userSub->vpn_plan_name ?? '')) !== '' ? (string) $userSub->vpn_plan_name : null,
+            'vpn_traffic_limit_bytes' => $userSub->vpn_traffic_limit_bytes !== null ? (int) $userSub->vpn_traffic_limit_bytes : null,
+            'vpn_access_mode' => trim((string) ($userSub->vpn_access_mode ?? '')) !== '' ? (string) $userSub->vpn_access_mode : null,
+        ];
+    }
+
+    private function resolveIntendedRenewalPlanSnapshot(?Subscription $subscription, object $userSub): array
+    {
+        $currentSnapshot = $this->currentPlanSnapshot($userSub);
+        if (!$subscription || trim((string) $subscription->name) !== 'VPN') {
+            return $currentSnapshot;
+        }
+
+        $nextPlanCode = trim((string) ($userSub->next_vpn_plan_code ?? ''));
+        if ($nextPlanCode === '') {
+            return $currentSnapshot;
+        }
+
+        return app(VpnPlanCatalog::class)->snapshot($nextPlanCode) ?? $currentSnapshot;
+    }
+
+    private function prepareRenewalContext(object $userSub, ?Subscription $subscription): array
+    {
+        $currentSnapshot = $this->currentPlanSnapshot($userSub);
+        $planSnapshot = $this->resolveIntendedRenewalPlanSnapshot($subscription, $userSub);
+        $currentServerId = (int) ($userSub->server_id ?? 0);
+
+        if ($currentServerId <= 0) {
+            $meta = SubscriptionBundleMeta::fromFilePath((string) ($userSub->file_path ?? ''));
+            $currentServerId = $meta?->serverId() ?? 0;
+        }
+
+        $context = [
+            'plan_snapshot' => $planSnapshot,
+            'file_path' => $userSub->file_path ?? null,
+            'server_id' => $currentServerId > 0 ? $currentServerId : null,
+            'vpn_access_mode' => trim((string) ($userSub->vpn_access_mode ?? '')) !== ''
+                ? (string) $userSub->vpn_access_mode
+                : ($planSnapshot['vpn_access_mode'] ?? null),
+            'new_server' => null,
+            'new_peer_name' => null,
+            'disable_previous' => false,
+            'carry_next_vpn_plan_code' => null,
+        ];
+
+        if (!$this->shouldReprovisionForRenewal($subscription, $userSub, $planSnapshot, $currentServerId)) {
+            return $context;
+        }
+
+        try {
+            $targetMode = trim((string) ($planSnapshot['vpn_access_mode'] ?? ''));
+            $server = $targetMode !== '' ? Server::resolvePurchaseServer($targetMode) : null;
+            $user = User::query()->find((int) $userSub->user_id);
+
+            if (!$server || !$user) {
+                throw new \RuntimeException('renewal.target.not_resolved');
+            }
+
+            $package = (new SubscriptionPackageBuilder($server, $user))->build();
+
+            $context['file_path'] = $package['file_path'] ?? $context['file_path'];
+            $context['server_id'] = (int) $server->id;
+            $context['vpn_access_mode'] = $server->getVpnAccessMode();
+            $context['new_server'] = $server;
+            $context['new_peer_name'] = (string) ($package['email'] ?? '');
+            $context['disable_previous'] = true;
+
+            return $context;
+        } catch (\Throwable $e) {
+            $nextPlanCode = trim((string) ($userSub->next_vpn_plan_code ?? ''));
+
+            $context['plan_snapshot'] = $currentSnapshot;
+            $context['vpn_access_mode'] = trim((string) ($userSub->vpn_access_mode ?? '')) !== ''
+                ? (string) $userSub->vpn_access_mode
+                : ($currentSnapshot['vpn_access_mode'] ?? null);
+            $context['carry_next_vpn_plan_code'] = $nextPlanCode !== '' ? $nextPlanCode : null;
+
+            Log::error('Scheduled next VPN plan reprovision failed', [
+                'user_id' => (int) ($userSub->user_id ?? 0),
+                'subscription_id' => (int) ($userSub->subscription_id ?? 0),
+                'next_vpn_plan_code' => $nextPlanCode,
+                'error' => $e->getMessage(),
+            ]);
+
+            $this->notifyAdmin(
+                'Не удалось применить выбранный тариф на следующий период. '
+                . 'user_id=' . (int) ($userSub->user_id ?? 0)
+                . ', subscription_id=' . (int) ($userSub->subscription_id ?? 0)
+                . ', next_vpn_plan_code=' . $nextPlanCode
+                . '. ' . $e->getMessage()
+            );
+
+            return $context;
+        }
+    }
+
+    private function shouldReprovisionForRenewal(?Subscription $subscription, object $userSub, array $planSnapshot, int $currentServerId): bool
+    {
+        if (!$subscription || trim((string) $subscription->name) !== 'VPN') {
+            return false;
+        }
+
+        if (trim((string) ($userSub->next_vpn_plan_code ?? '')) === '') {
+            return false;
+        }
+
+        $targetMode = trim((string) ($planSnapshot['vpn_access_mode'] ?? ''));
+        if ($targetMode === '') {
+            return false;
+        }
+
+        $currentMode = trim((string) ($userSub->vpn_access_mode ?? ''));
+        if ($currentMode === '' && $currentServerId > 0) {
+            $currentMode = optional(Server::query()->find($currentServerId))->getVpnAccessMode() ?? '';
+        }
+
+        $targetServer = Server::resolvePurchaseServer($targetMode);
+        if (!$targetServer) {
+            return false;
+        }
+
+        return $currentMode !== $targetMode || $currentServerId !== (int) $targetServer->id;
+    }
+
+    private function disableExistingBundlePeer(object $userSub): void
+    {
+        [$meta, $server, $resolveError] = $this->resolveBundleServerTarget($userSub->file_path ?? null);
+        if (!$meta || !$server) {
+            if ($resolveError) {
+                Log::warning('Unable to resolve previous bundle peer for renewal cleanup', [
+                    'user_id' => (int) ($userSub->user_id ?? 0),
+                    'subscription_id' => (int) ($userSub->subscription_id ?? 0),
+                    'error' => $resolveError,
+                ]);
+            }
+
+            return;
+        }
+
+        try {
+            if ($server->usesNode1Api()) {
+                $this->peerOperator()->disableNodePeer($server, $meta->peerName(), true);
+            } else {
+                $this->peerOperator()->disableInboundPeer($server, $meta->peerName());
+            }
+
+            $this->peerOperator()->syncServerState($server, $meta->peerName(), 'disabled', (int) ($userSub->user_id ?? 0));
+        } catch (\Throwable $e) {
+            Log::error('Unable to disable previous bundle peer after renewal reprovision', [
+                'user_id' => (int) ($userSub->user_id ?? 0),
+                'subscription_id' => (int) ($userSub->subscription_id ?? 0),
+                'peer_name' => $meta->peerName(),
+                'server_id' => (int) $server->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            $this->notifyAdmin(
+                'Не удалось отключить старый peer после продления с новым тарифом. '
+                . 'user_id=' . (int) ($userSub->user_id ?? 0)
+                . ', subscription_id=' . (int) ($userSub->subscription_id ?? 0)
+                . ', peer_name=' . $meta->peerName()
+                . ', server_id=' . (int) $server->id
+                . '. ' . $e->getMessage()
+            );
+        }
+    }
+
+    private function resolveBasePriceCentsFromPlanSnapshot(Subscription $subscription, array $planSnapshot): int
     {
         return app(VpnPlanCatalog::class)->resolveBasePriceCents(
             $subscription,
-            (string) ($userSub->vpn_plan_code ?? '')
+            (string) ($planSnapshot['vpn_plan_code'] ?? '')
         );
     }
 }

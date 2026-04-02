@@ -24,6 +24,8 @@
     $isLegacyVpnCard = $userSub
         ? trim((string) ($userSub->vpn_plan_code ?? '')) === ''
         : false;
+    $nextVpnPlanCode = trim((string) ($userSub->next_vpn_plan_code ?? ''));
+    $nextVpnPlanLabel = $userSub?->nextVpnPlanLabel();
     $pendingVpnAccessModeDisconnectAt = $userSub?->pendingVpnAccessModeDisconnectAt();
     $hasPendingVpnAccessModeSwitch = $userSub?->hasPendingVpnAccessModeSwitch() ?? false;
     $pendingVpnAccessModeText = $pendingVpnAccessModeDisconnectAt
@@ -46,6 +48,23 @@
         return number_format(max(0, $bytes) / 1073741824, 2, '.', ' ') . ' ГБ';
     };
     $topupOptions = app(\App\Services\VpnTopupCatalog::class)->all();
+    $legacyNextPlanOptions = [];
+    $showLegacyNextPlanSection = false;
+    if (
+        $userSub
+        && $isLegacyVpnCard
+        && $sub
+        && trim((string) ($sub->name ?? '')) === 'VPN'
+        && $subInfo->isConnected()
+        && !$subInfo->isExpired()
+    ) {
+        $legacyNextPlanOptions = app(\App\Services\VpnPlanCatalog::class)->purchaseOptions(
+            $sub,
+            Auth::user()?->referrer,
+            Auth::user()
+        );
+        $showLegacyNextPlanSection = !empty($legacyNextPlanOptions);
+    }
 @endphp
 <div
     class="service-block__card {{ $subInfo->isConnected() ? '--active' : '' }}"
@@ -214,6 +233,53 @@
         </div>
     @endif
 
+    @if ($showLegacyNextPlanSection)
+        <div class="service-block__legacy-plan">
+            <div class="service-block__legacy-plan-head">
+                <span class="service-block__legacy-plan-badge">Старый тариф</span>
+                <div class="service-block__legacy-plan-title">Этот тариф больше не оформляется.</div>
+                @if ($nextVpnPlanLabel)
+                    <div class="service-block__legacy-plan-next">
+                        Со следующего периода будет: <strong>{{ $nextVpnPlanLabel }}</strong>
+                    </div>
+                @endif
+            </div>
+            <details class="service-block__legacy-plan-details">
+                <summary class="service-block__legacy-plan-summary">
+                    {{ $nextVpnPlanLabel ? 'Изменить тариф на следующий период' : 'Выбрать новый тариф со следующего периода' }}
+                </summary>
+                <div class="service-block__legacy-plan-body">
+                    <div class="service-block__legacy-plan-hint">
+                        Текущий тариф продолжит работать до конца оплаченного периода.
+                    </div>
+                    <form method="POST" action="{{ route('user-subscription.next-vpn-plan') }}" class="service-block__legacy-plan-form">
+                        @csrf
+                        <input type="hidden" name="user_subscription_id" value="{{ (int) $userSub->id }}">
+                        <label class="service-block__legacy-plan-field">
+                            <span class="service-block__legacy-plan-label">Новый тариф</span>
+                            <select name="vpn_plan_code" class="service-block__legacy-plan-select" required>
+                                <option value="" disabled {{ $nextVpnPlanCode === '' ? 'selected' : '' }}>Выберите тариф</option>
+                                @foreach ($legacyNextPlanOptions as $plan)
+                                    @php
+                                        $planSuffix = ($plan['traffic_limit_gb'] ?? null) !== null
+                                            ? ($plan['traffic_limit_gb'] . ' ГБ')
+                                            : 'безлимит';
+                                    @endphp
+                                    <option value="{{ $plan['code'] }}" {{ $nextVpnPlanCode === (string) $plan['code'] ? 'selected' : '' }}>
+                                        {{ $plan['label'] }} — {{ (int) ($plan['final_price_rub'] ?? 0) }} ₽/мес · {{ $planSuffix }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </label>
+                        <button type="submit" class="service-block__action-btn service-block__action-btn--secondary service-block__legacy-plan-submit">
+                            Сохранить тариф на следующий период
+                        </button>
+                    </form>
+                </div>
+            </details>
+        </div>
+    @endif
+
     @if ($showTopupSection)
         <div class="service-block__topup">
             <div class="service-block__topup-title">Докупить трафик</div>
@@ -235,8 +301,8 @@
                         <input type="hidden" name="user_subscription_id" value="{{ (int) $userSub->id }}">
                         <input type="hidden" name="topup_code" value="{{ $topup['code'] }}">
                         <button type="submit" class="service-block__topup-btn">
-                            <span>{{ $topup['label'] }}</span>
-                            <span>{{ (int) $topup['price_rub'] }} ₽</span>
+                            <span class="service-block__topup-btn-label">Докупить {{ $topup['label'] }}</span>
+                            <span class="service-block__topup-btn-price">{{ (int) $topup['price_rub'] }} ₽</span>
                         </button>
                     </form>
                 @endforeach
