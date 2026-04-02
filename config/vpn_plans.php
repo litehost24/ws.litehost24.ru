@@ -9,7 +9,7 @@ return [
         'regular_basic' => [
             'label' => 'Обычное подключение',
             'short_label' => 'Обычное',
-            'description' => 'Для оптики, Wi‑Fi и проводного интернета. Безлимит по гигабайтам.',
+            'description' => 'Подходит для Wi‑Fi и проводного интернета.',
             'vpn_access_mode' => Server::VPN_ACCESS_REGULAR,
             'base_price_cents' => 10000,
             'traffic_limit_bytes' => null,
