@@ -143,4 +143,50 @@ class UserSubscriptionSwitchVpnAccessModeTest extends TestCase
             (string) $response->json('message')
         );
     }
+
+    public function test_regular_only_plan_cannot_switch_to_restricted_mode(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $regular = Server::query()->create([
+            'ip1' => '45.94.47.139',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_REGULAR,
+            'url2' => 'https://79.110.227.174:2053',
+        ]);
+
+        $userSub = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => Subscription::factory()->create([
+                'name' => 'VPN',
+                'price' => 5000,
+            ])->id,
+            'price' => 5000,
+            'action' => 'create',
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(10)->toDateString(),
+            'file_path' => 'files/' . $user->id . '_device-regular_' . $regular->id . '_02_04_2026_23_00.zip',
+            'server_id' => $regular->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_REGULAR,
+            'vpn_plan_code' => 'regular_basic',
+            'vpn_plan_name' => 'Обычное подключение',
+        ]);
+
+        $response = $this->actingAs($user)->getJson(route('user-subscription.switch-vpn-access-mode', [
+            'user_subscription_id' => $userSub->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]));
+
+        $response->assertStatus(422);
+        $response->assertJson([
+            'message' => 'Для текущего тарифа подключение при ограничениях недоступно.',
+        ]);
+
+        $this->assertSame(Server::VPN_ACCESS_REGULAR, (string) $userSub->fresh()->vpn_access_mode);
+        $this->assertSame(1, UserSubscription::query()->count());
+    }
 }

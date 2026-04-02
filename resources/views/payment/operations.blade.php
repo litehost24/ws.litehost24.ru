@@ -49,7 +49,7 @@
                     </div>
 
                     <div class="mt-6">
-                        <h4 class="text-sm font-semibold text-gray-900">&#1057;&#1087;&#1080;&#1089;&#1072;&#1085;&#1080;&#1103; &#1080; &#1079;&#1072;&#1087;&#1080;&#1089;&#1080; &#1087;&#1086;&#1076;&#1087;&#1080;&#1089;&#1086;&#1082;</h4>
+                        <h4 class="text-sm font-semibold text-gray-900">Списания по подпискам</h4>
                         <div class="mt-2 max-h-64 overflow-auto rounded-md border border-gray-200">
                             <table class="min-w-full text-xs">
                                 <thead class="bg-gray-50 text-gray-600">
@@ -75,6 +75,38 @@
                                 @empty
                                     <tr>
                                         <td class="px-2 py-2 text-gray-500" colspan="6">&#1057;&#1087;&#1080;&#1089;&#1072;&#1085;&#1080;&#1081; &#1087;&#1086;&#1082;&#1072; &#1085;&#1077;&#1090;</td>
+                                    </tr>
+                                @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <h4 class="text-sm font-semibold text-gray-900">Докупка трафика для режима при ограничениях</h4>
+                        <div class="mt-2 max-h-56 overflow-auto rounded-md border border-gray-200">
+                            <table class="min-w-full text-xs">
+                                <thead class="bg-gray-50 text-gray-600">
+                                <tr>
+                                    <th class="px-2 py-2 text-left">Дата</th>
+                                    <th class="px-2 py-2 text-left">Действует до</th>
+                                    <th class="px-2 py-2 text-left">Пакет</th>
+                                    <th class="px-2 py-2 text-left">Трафик</th>
+                                    <th class="px-2 py-2 text-left">Сумма</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                @forelse(($topupsHistory ?? collect()) as $topup)
+                                    <tr class="{{ $loop->even ? 'bg-gray-50' : '' }}">
+                                        <td class="px-2 py-2 whitespace-nowrap">{{ optional($topup->created_at)->format('Y-m-d H:i') }}</td>
+                                        <td class="px-2 py-2 whitespace-nowrap">{{ optional($topup->expires_on)->format('Y-m-d') }}</td>
+                                        <td class="px-2 py-2 whitespace-nowrap">{{ $topup->name }}</td>
+                                        <td class="px-2 py-2 whitespace-nowrap">{{ number_format(((int) $topup->traffic_bytes) / 1073741824, 0, '.', ' ') }} ГБ</td>
+                                        <td class="px-2 py-2 whitespace-nowrap">{{ number_format(((int) $topup->price) / 100, 2, '.', ' ') }} &#8381;</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td class="px-2 py-2 text-gray-500" colspan="5">Пакетов трафика пока нет</td>
                                     </tr>
                                 @endforelse
                                 </tbody>

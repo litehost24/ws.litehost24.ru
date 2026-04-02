@@ -126,6 +126,10 @@ class UserSubscriptionAddVpnTest extends TestCase
         $this->assertNotNull($created);
         $this->assertSame((int) $white->id, (int) $created->server_id);
         $this->assertSame(Server::VPN_ACCESS_WHITE_IP, (string) $created->vpn_access_mode);
+        $this->assertSame('restricted_standard', (string) $created->vpn_plan_code);
+        $this->assertSame('Стандарт', (string) $created->vpn_plan_name);
+        $this->assertSame(30 * 1024 * 1024 * 1024, (int) $created->vpn_traffic_limit_bytes);
+        $this->assertSame(20000, (int) $created->price);
 
         $peerName = VpnPeerName::fromSubscription($created, $created->resolveServerId());
         $this->assertNotNull($peerName);
@@ -138,5 +142,49 @@ class UserSubscriptionAddVpnTest extends TestCase
         $this->assertNotNull($state);
         $this->assertSame('enabled', (string) $state->server_status);
         $this->assertSame((int) $user->id, (int) $state->user_id);
+    }
+
+    public function test_add_vpn_uses_explicit_selected_plan_for_price_and_snapshot(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        Payment::factory()->create([
+            'user_id' => $user->id,
+            'amount' => 50000,
+        ]);
+
+        $white = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'url2' => 'https://79.110.227.174:2053',
+        ]);
+
+        ProjectSetting::setValue(Server::CURRENT_WHITE_IP_SERVER_SETTING, (string) $white->id);
+
+        Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+
+        $response = $this->actingAs($user)->postJson(route('user-subscription.add-vpn'), [
+            'note' => 'Laptop',
+            'vpn_plan_code' => 'restricted_premium',
+        ]);
+
+        $response->assertOk();
+
+        $created = UserSubscription::query()->latest('id')->first();
+
+        $this->assertNotNull($created);
+        $this->assertSame(Server::VPN_ACCESS_WHITE_IP, (string) $created->vpn_access_mode);
+        $this->assertSame('restricted_premium', (string) $created->vpn_plan_code);
+        $this->assertSame('Премиум', (string) $created->vpn_plan_name);
+        $this->assertSame(50 * 1024 * 1024 * 1024, (int) $created->vpn_traffic_limit_bytes);
+        $this->assertSame(30000, (int) $created->price);
+        $this->assertSame('Laptop', (string) $created->note);
     }
 }

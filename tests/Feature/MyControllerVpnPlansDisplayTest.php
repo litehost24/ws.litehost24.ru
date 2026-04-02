@@ -1,0 +1,89 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Server;
+use App\Models\Subscription;
+use App\Models\User;
+use App\Models\UserSubscription;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
+
+class MyControllerVpnPlansDisplayTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_my_main_displays_vpn_plan_options_and_current_period_quota(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+        $server = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        $userSub = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 20000,
+            'action' => 'create',
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(20)->toDateString(),
+            'created_at' => Carbon::today()->subDays(2),
+            'updated_at' => Carbon::today()->subDays(2),
+            'file_path' => 'files/' . $user->id . '_peerquota_' . $server->id . '_31_03_2026_18_00.zip',
+            'server_id' => $server->id,
+            'vpn_access_mode' => 'white_ip',
+            'vpn_plan_code' => 'restricted_standard',
+            'vpn_plan_name' => 'Стандарт',
+            'vpn_traffic_limit_bytes' => 30 * 1024 * 1024 * 1024,
+        ]);
+
+        DB::table('vpn_peer_traffic_daily')->insert([
+            'date' => Carbon::today()->subDay()->toDateString(),
+            'server_id' => $server->id,
+            'user_id' => $user->id,
+            'peer_name' => 'peerquota',
+            'public_key' => 'pk-peerquota',
+            'ip' => '10.66.66.5/32',
+            'rx_bytes_delta' => 1024,
+            'tx_bytes_delta' => 2048,
+            'total_bytes_delta' => 3 * 1024 * 1024 * 1024,
+            'vless_rx_bytes_delta' => 0,
+            'vless_tx_bytes_delta' => 0,
+            'vless_total_bytes_delta' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->get(route('my.main'));
+
+        $response->assertOk();
+        $response->assertSee('Эконом', false);
+        $response->assertSee('Стандарт', false);
+        $response->assertSee('Премиум', false);
+        $response->assertSee('Обычное подключение', false);
+        $response->assertSee('100 ₽/мес', false);
+        $response->assertSee('200 ₽/мес', false);
+        $response->assertSee('300 ₽/мес', false);
+        $response->assertSee('Безлимит по гигабайтам', false);
+        $response->assertSee('пакет периода:', false);
+        $response->assertSee('использовано:', false);
+        $response->assertSee('осталось:', false);
+        $response->assertSee('Докупить трафик', false);
+        $response->assertSee('10 ГБ', false);
+        $response->assertSee('50 ₽', false);
+        $response->assertSee('Неиспользованный остаток на следующий период не переносится.', false);
+    }
+}

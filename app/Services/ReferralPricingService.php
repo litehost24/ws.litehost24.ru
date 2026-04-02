@@ -95,9 +95,9 @@ class ReferralPricingService
         }
     }
 
-    public function getFinalPriceCents(Subscription $sub, ?User $referrer, User $referral): int
+    public function getFinalPriceCents(Subscription $sub, ?User $referrer, User $referral, ?int $baseOverrideCents = null): int
     {
-        $base = (int) $sub->price;
+        $base = $baseOverrideCents !== null ? max(0, (int) $baseOverrideCents) : (int) $sub->price;
         $serviceKey = $this->getServiceKey($sub);
         if (!$serviceKey || !$referrer || !in_array($referrer->role, ['partner', 'admin'], true)) {
             return $base;
@@ -107,13 +107,14 @@ class ReferralPricingService
         return $base + $markup;
     }
 
-    public function applyEarning(UserSubscription $userSub, Subscription $sub, ?User $referrer, User $referral): void
+    public function applyEarning(UserSubscription $userSub, Subscription $sub, ?User $referrer, User $referral, ?int $baseOverrideCents = null): void
     {
         $serviceKey = $this->getServiceKey($sub);
         if (!$serviceKey || !$referrer || !in_array($referrer->role, ['partner', 'admin'], true)) {
             return;
         }
 
+        $basePriceCents = $baseOverrideCents !== null ? max(0, (int) $baseOverrideCents) : (int) $sub->price;
         $markup = $this->getMarkupCents($referrer->id, $referral->id, $serviceKey);
         if ($markup <= 0) {
             return;
@@ -133,6 +134,7 @@ class ReferralPricingService
             $referrer,
             $referral,
             $serviceKey,
+            $basePriceCents,
             $markup,
             $projectCutPct,
             $projectCutCents,
@@ -143,7 +145,7 @@ class ReferralPricingService
                 'referral_id' => (int) $referral->id,
                 'user_subscription_id' => (int) $userSub->id,
                 'service_key' => $serviceKey,
-                'base_price_cents' => (int) $sub->price,
+                'base_price_cents' => $basePriceCents,
                 'markup_cents' => (int) $markup,
                 'project_cut_pct' => (int) $projectCutPct,
                 'project_cut_cents' => (int) $projectCutCents,

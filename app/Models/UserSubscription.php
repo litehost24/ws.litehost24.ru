@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\VpnPlanCatalog;
 use App\Support\VpnPeerName;
 use App\Support\SubscriptionBundleMeta;
 use Illuminate\Database\Eloquent\Builder;
@@ -52,6 +53,9 @@ class UserSubscription extends Model
         'connection_config',
         'server_id',
         'vpn_access_mode',
+        'vpn_plan_code',
+        'vpn_plan_name',
+        'vpn_traffic_limit_bytes',
         'pending_vpn_access_mode_source_server_id',
         'pending_vpn_access_mode_source_peer_name',
         'pending_vpn_access_mode_disconnect_at',
@@ -61,6 +65,7 @@ class UserSubscription extends Model
     ];
 
     protected $casts = [
+        'vpn_traffic_limit_bytes' => 'integer',
         'pending_vpn_access_mode_disconnect_at' => 'datetime',
         'vless_blocked_until' => 'datetime',
         'dual_protocol_last_seen_at' => 'datetime',
@@ -322,6 +327,136 @@ class UserSubscription extends Model
         return $subscriptions;
     }
 
+    public static function attachTrafficPeriodUsage(Collection $subscriptions): Collection
+    {
+        if ($subscriptions->isEmpty()) {
+            return $subscriptions;
+        }
+
+        foreach ($subscriptions as $sub) {
+            $limitBytes = $sub instanceof self ? $sub->vpnTrafficLimitBytes() : null;
+            $sub->traffic_period_bytes = $limitBytes !== null ? 0 : null;
+            $sub->traffic_topup_bytes = 0;
+            $sub->traffic_available_bytes = $limitBytes;
+            $sub->traffic_remaining_bytes = $limitBytes;
+        }
+
+        if (!Schema::hasTable('vpn_peer_traffic_daily')) {
+            return $subscriptions;
+        }
+
+        $items = $subscriptions->filter(fn ($sub) => $sub instanceof self)->values();
+        if ($items->isEmpty()) {
+            return $subscriptions;
+        }
+
+        $userIds = [];
+        $peerNames = [];
+        $minDate = null;
+        $userSubscriptionIds = [];
+        $meta = [];
+        $whiteIpServerIds = Server::query()
+            ->where('vpn_access_mode', Server::VPN_ACCESS_WHITE_IP)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        foreach ($items as $sub) {
+            $userId = (int) ($sub->user_id ?? 0);
+            $peerName = VpnPeerName::fromSubscription($sub);
+            $startDate = $sub->created_at instanceof Carbon
+                ? $sub->created_at->copy()->startOfDay()->toDateString()
+                : Carbon::today()->toDateString();
+            $userSubscriptionId = (int) ($sub->id ?? 0);
+
+            if ($userId > 0) {
+                $userIds[$userId] = $userId;
+            }
+            if ($peerName !== null && $peerName !== '') {
+                $peerNames[$peerName] = $peerName;
+            }
+            if ($userSubscriptionId > 0) {
+                $userSubscriptionIds[$userSubscriptionId] = $userSubscriptionId;
+            }
+
+            $meta[(int) $sub->id] = [
+                'user_id' => $userId,
+                'peer_name' => $peerName,
+                'start_date' => $startDate,
+            ];
+
+            if ($minDate === null || $startDate < $minDate) {
+                $minDate = $startDate;
+            }
+        }
+
+        if (empty($userIds) || empty($peerNames) || $minDate === null) {
+            return $subscriptions;
+        }
+
+        $dailyQuery = VpnPeerTrafficDaily::query()
+            ->select('user_id', 'peer_name', 'date', DB::raw('SUM(total_bytes_delta) as total_bytes'))
+            ->whereIn('user_id', array_values($userIds))
+            ->whereIn('peer_name', array_values($peerNames))
+            ->whereDate('date', '>=', $minDate)
+            ->groupBy('user_id', 'peer_name', 'date')
+            ->orderBy('date');
+
+        if (!empty($whiteIpServerIds)) {
+            $dailyQuery->whereIn('server_id', $whiteIpServerIds);
+        }
+
+        $daily = $dailyQuery->get();
+
+        $dailyByUserPeer = [];
+        foreach ($daily as $row) {
+            $dailyByUserPeer[(int) $row->user_id . ':' . (string) $row->peer_name][] = [
+                'date' => (string) $row->date,
+                'bytes' => (int) $row->total_bytes,
+            ];
+        }
+
+        $topupsByUserSubscriptionId = [];
+        if (!empty($userSubscriptionIds) && Schema::hasTable('user_subscription_topups')) {
+            $topupsByUserSubscriptionId = UserSubscriptionTopup::query()
+                ->select('user_subscription_id', DB::raw('SUM(traffic_bytes) as total_traffic_bytes'))
+                ->whereIn('user_subscription_id', array_values($userSubscriptionIds))
+                ->groupBy('user_subscription_id')
+                ->get()
+                ->keyBy(fn ($row) => (int) $row->user_subscription_id);
+        }
+
+        foreach ($subscriptions as $sub) {
+            $info = $meta[(int) ($sub->id ?? 0)] ?? null;
+            if (!$info || empty($info['user_id']) || empty($info['peer_name'])) {
+                continue;
+            }
+
+            $periodBytes = 0;
+            $rows = $dailyByUserPeer[$info['user_id'] . ':' . $info['peer_name']] ?? [];
+            foreach ($rows as $row) {
+                if ((string) $row['date'] < (string) $info['start_date']) {
+                    continue;
+                }
+
+                $periodBytes += (int) ($row['bytes'] ?? 0);
+            }
+
+            $sub->traffic_period_bytes = $periodBytes;
+            $topupBytes = (int) ($topupsByUserSubscriptionId[(int) ($sub->id ?? 0)]->total_traffic_bytes ?? 0);
+            $sub->traffic_topup_bytes = $topupBytes;
+            $limitBytes = $sub->vpnTrafficLimitBytes();
+            $sub->traffic_available_bytes = $limitBytes !== null
+                ? ($limitBytes + $topupBytes)
+                : null;
+            $sub->traffic_remaining_bytes = $limitBytes !== null
+                ? max(0, ($limitBytes + $topupBytes) - $periodBytes)
+                : null;
+        }
+
+        return $subscriptions;
+    }
+
     public static function nextMonthlyEndDate(?string $previousEndDate): string
     {
         $fallbackBase = Carbon::today()->startOfDay();
@@ -406,6 +541,47 @@ class UserSubscription extends Model
         return Server::vpnAccessModeOptions()[$mode] ?? null;
     }
 
+    public function vpnPlan(): ?array
+    {
+        $planCode = trim((string) ($this->vpn_plan_code ?? ''));
+        if ($planCode === '') {
+            return null;
+        }
+
+        return app(VpnPlanCatalog::class)->find($planCode);
+    }
+
+    public function vpnPlanLabel(): ?string
+    {
+        return app(VpnPlanCatalog::class)->displayLabelForUserSubscription($this);
+    }
+
+    public function vpnTrafficLimitBytes(): ?int
+    {
+        if ($this->vpn_traffic_limit_bytes !== null) {
+            return max(0, (int) $this->vpn_traffic_limit_bytes);
+        }
+
+        $plan = $this->vpnPlan();
+        if ($plan === null) {
+            return null;
+        }
+
+        return $plan['traffic_limit_bytes'] !== null
+            ? max(0, (int) $plan['traffic_limit_bytes'])
+            : null;
+    }
+
+    public function allowsRestrictedMode(): bool
+    {
+        $planCode = trim((string) ($this->vpn_plan_code ?? ''));
+        if ($planCode === '') {
+            return true;
+        }
+
+        return app(VpnPlanCatalog::class)->allowsRestrictedMode($planCode);
+    }
+
     public function hasPendingVpnAccessModeSwitch(): bool
     {
         return (int) ($this->pending_vpn_access_mode_source_server_id ?? 0) > 0
@@ -427,9 +603,27 @@ class UserSubscription extends Model
             return null;
         }
 
-        return $mode === Server::VPN_ACCESS_WHITE_IP
+        $targetMode = $mode === Server::VPN_ACCESS_WHITE_IP
             ? Server::VPN_ACCESS_REGULAR
             : Server::VPN_ACCESS_WHITE_IP;
+
+        return $this->canSwitchToVpnAccessMode($targetMode) ? $targetMode : null;
+    }
+
+    public function canSwitchToVpnAccessMode(?string $targetMode): bool
+    {
+        $targetMode = trim((string) $targetMode);
+        if ($targetMode === '') {
+            return false;
+        }
+
+        $targetMode = Server::normalizeVpnAccessMode($targetMode);
+
+        if ($targetMode === Server::VPN_ACCESS_WHITE_IP && !$this->allowsRestrictedMode()) {
+            return false;
+        }
+
+        return true;
     }
 
     public function canSwitchVpnAccessMode(): bool
@@ -446,7 +640,11 @@ class UserSubscription extends Model
             return false;
         }
 
-        return $this->resolveServerId() !== null && $this->switchTargetVpnAccessMode() !== null;
+        $targetMode = $this->switchTargetVpnAccessMode();
+
+        return $this->resolveServerId() !== null
+            && $targetMode !== null
+            && $this->canSwitchToVpnAccessMode($targetMode);
     }
 
     private static function shiftMonthlyWithAnchor(Carbon $base): string

@@ -4,7 +4,9 @@ namespace App\Models\components;
 
 use App\Models\Payment;
 use App\Models\UserSubscription;
+use App\Models\UserSubscriptionTopup;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class Balance
 {
@@ -25,7 +27,10 @@ class Balance
         }
         $paymentAmountSum = Payment::where('user_id', $user_id)->sum('amount');
         $userSubsPriceSum = UserSubscription::where('user_id', $user_id)->sum('price');
+        $topupPriceSum = Schema::hasTable('user_subscription_topups')
+            ? UserSubscriptionTopup::where('user_id', $user_id)->sum('price')
+            : 0;
 
-        return ($paymentAmountSum - $userSubsPriceSum);
+        return ($paymentAmountSum - $userSubsPriceSum - $topupPriceSum);
     }
 }

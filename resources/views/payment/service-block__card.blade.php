@@ -16,6 +16,8 @@
     $instructionTargetId = $cardKey;
     $userSubscriptionQuery = $userSub ? '&user_subscription_id=' . (int) $userSub->id : '';
     $vpnAccessModeLabel = $userSub?->vpnAccessModeLabel();
+    $vpnPlanLabel = $userSub?->vpnPlanLabel();
+    $displayPlanLabel = $vpnPlanLabel && $vpnPlanLabel !== $vpnAccessModeLabel ? $vpnPlanLabel : null;
     $switchTargetMode = $userSub?->switchTargetVpnAccessMode();
     $switchTargetLabel = $switchTargetMode ? (\App\Models\Server::vpnAccessModeOptions()[$switchTargetMode] ?? null) : null;
     $canSwitchVpnAccessMode = $userSub?->canSwitchVpnAccessMode() ?? false;
@@ -33,6 +35,14 @@
             'protocol' => 'tabbed',
         ])
         : '';
+    $formatTrafficGb = static function (?int $bytes): ?string {
+        if ($bytes === null) {
+            return null;
+        }
+
+        return number_format(max(0, $bytes) / 1073741824, 2, '.', ' ') . ' ГБ';
+    };
+    $topupOptions = app(\App\Services\VpnTopupCatalog::class)->all();
 @endphp
 <div
     class="service-block__card {{ $subInfo->isConnected() ? '--active' : '' }}"
@@ -54,6 +64,20 @@
         $isSoon = $subInfo->isExpiringSoon(7);
         $trafficTotalBytes = isset($userSub?->traffic_total_bytes) ? (int) $userSub->traffic_total_bytes : null;
         $trafficGb = $trafficTotalBytes !== null ? ($trafficTotalBytes / 1073741824) : null;
+        $trafficPeriodBytes = isset($userSub?->traffic_period_bytes) ? (int) $userSub->traffic_period_bytes : null;
+        $trafficTopupBytes = isset($userSub?->traffic_topup_bytes) ? (int) $userSub->traffic_topup_bytes : 0;
+        $trafficAvailableBytes = isset($userSub?->traffic_available_bytes) ? (int) $userSub->traffic_available_bytes : null;
+        $trafficRemainingBytes = isset($userSub?->traffic_remaining_bytes) ? (int) $userSub->traffic_remaining_bytes : null;
+        $trafficLimitBytes = $userSub?->vpnTrafficLimitBytes();
+        $showTopupSection = $userSub && $userSub->isLocallyActive() && $trafficLimitBytes !== null && !empty($topupOptions);
+        $topupExpiresAt = null;
+        if ($showTopupSection) {
+            try {
+                $topupExpiresAt = \Illuminate\Support\Carbon::parse((string) $userSub->end_date);
+            } catch (\Throwable) {
+                $topupExpiresAt = null;
+            }
+        }
 
         if ($subInfo->isExpired()) {
             $statusColorClass = 'text-red-600';
@@ -132,6 +156,9 @@
             @if ($vpnAccessModeLabel)
                 <span class="service-block__mode-badge">{{ $vpnAccessModeLabel }}</span>
             @endif
+            @if ($displayPlanLabel)
+                <span class="service-block__mode-badge service-block__mode-badge--plan">{{ $displayPlanLabel }}</span>
+            @endif
         </div>
         <div class="service-block__status-row">
             @if ($subInfo->isProcessing())
@@ -152,6 +179,17 @@
                     трафик Amnezia: {{ number_format($trafficGb, 2, '.', ' ') }} ГБ
                 </span>
             @endif
+            @if ($trafficLimitBytes !== null && $trafficPeriodBytes !== null)
+                <span class="text-gray-600 service-block__status service-block__status--traffic block">
+                    пакет периода: {{ $formatTrafficGb($trafficLimitBytes) }}
+                    @if ($trafficTopupBytes > 0)
+                        · докуплено: {{ $formatTrafficGb($trafficTopupBytes) }}
+                        · всего: {{ $formatTrafficGb($trafficAvailableBytes ?? ($trafficLimitBytes + $trafficTopupBytes)) }}
+                    @endif
+                    · использовано: {{ $formatTrafficGb($trafficPeriodBytes) }}
+                    · осталось: {{ $formatTrafficGb($trafficRemainingBytes ?? max(0, ($trafficAvailableBytes ?? $trafficLimitBytes) - $trafficPeriodBytes)) }}
+                </span>
+            @endif
         </div>
     </div>
 
@@ -170,6 +208,36 @@
                 </svg>
                 <span>Открыть инструкцию</span>
             </button>
+        </div>
+    @endif
+
+    @if ($showTopupSection)
+        <div class="service-block__topup">
+            <div class="service-block__topup-title">Докупить трафик</div>
+            <div class="service-block__topup-meta">
+                <span>Включено: {{ $formatTrafficGb($trafficLimitBytes) }}</span>
+                <span>Докуплено: {{ $formatTrafficGb($trafficTopupBytes) }}</span>
+                <span>Всего доступно: {{ $formatTrafficGb($trafficAvailableBytes ?? ($trafficLimitBytes + $trafficTopupBytes)) }}</span>
+                @if ($topupExpiresAt)
+                    <span>До {{ $topupExpiresAt->format('d.m.Y') }}</span>
+                @endif
+            </div>
+            <div class="service-block__topup-warning">
+                <strong>Важно:</strong> дополнительный трафик действует только до конца текущего периода подписки. Неиспользованный остаток на следующий период не переносится.
+            </div>
+            <div class="service-block__topup-grid">
+                @foreach ($topupOptions as $topup)
+                    <form method="POST" action="{{ route('user-subscription.topup') }}" class="service-block__topup-form">
+                        @csrf
+                        <input type="hidden" name="user_subscription_id" value="{{ (int) $userSub->id }}">
+                        <input type="hidden" name="topup_code" value="{{ $topup['code'] }}">
+                        <button type="submit" class="service-block__topup-btn">
+                            <span>{{ $topup['label'] }}</span>
+                            <span>{{ (int) $topup['price_rub'] }} ₽</span>
+                        </button>
+                    </form>
+                @endforeach
+            </div>
         </div>
     @endif
 

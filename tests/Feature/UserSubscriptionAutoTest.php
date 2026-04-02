@@ -139,6 +139,42 @@ class UserSubscriptionAutoTest extends TestCase
         $this->assertEquals(1, $result->last()->is_processed);
     }
 
+    public function test_auto_rebilling_keeps_vpn_plan_snapshot_and_price(): void
+    {
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+        $user = User::factory()->create();
+        Payment::factory()->create([
+            'user_id' => $user->id,
+            'amount' => 50000,
+        ]);
+
+        $expiredDate = Carbon::today()->subDay()->toDateString();
+
+        UserSubscription::factory()->create([
+            'subscription_id' => $subscription->id,
+            'user_id' => $user->id,
+            'price' => 20000,
+            'end_date' => $expiredDate,
+            'is_processed' => true,
+            'vpn_plan_code' => 'restricted_standard',
+            'vpn_plan_name' => 'Стандарт',
+            'vpn_traffic_limit_bytes' => 30 * 1024 * 1024 * 1024,
+        ]);
+
+        (new AutoUserSubscriptionManage())->start();
+
+        $result = UserSubscription::query()->orderBy('id')->get();
+
+        $this->assertCount(2, $result);
+        $this->assertSame(20000, (int) $result->last()->price);
+        $this->assertSame('restricted_standard', (string) $result->last()->vpn_plan_code);
+        $this->assertSame('Стандарт', (string) $result->last()->vpn_plan_name);
+        $this->assertSame(30 * 1024 * 1024 * 1024, (int) $result->last()->vpn_traffic_limit_bytes);
+    }
+
     private function createNodeServer(): Server
     {
         return Server::query()->create([

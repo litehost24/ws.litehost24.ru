@@ -8,6 +8,7 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Models\UserSubscription;
 use App\Services\ReferralPricingService;
+use App\Services\VpnPlanCatalog;
 use App\Services\VpnAgent\SubscriptionPeerOperator;
 use App\Support\SubscriptionBundleMeta;
 use Illuminate\Database\Eloquent\Collection;
@@ -142,13 +143,13 @@ class AutoUserSubscriptionManage
 
         $subscription = $subs->firstWhere('id', $userSub->subscription_id);
         $subscriptionName = $subscription ? $subscription->name : 'Unknown';
-        $subscriptionPrice = $subscription ? $subscription->price : $userSub->price;
+        $subscriptionPrice = $subscription ? $this->resolveBasePriceCents($subscription, $userSub) : (int) $userSub->price;
 
         $pricing = app(ReferralPricingService::class);
         $referral = User::query()->find((int) $userSub->user_id);
         $referrer = $referral?->referrer;
         if ($subscription && $referral) {
-            $subscriptionPrice = $pricing->getFinalPriceCents($subscription, $referrer, $referral);
+            $subscriptionPrice = $pricing->getFinalPriceCents($subscription, $referrer, $referral, $subscriptionPrice);
         }
 
         $newSubscription = UserSubscription::create([
@@ -164,11 +165,14 @@ class AutoUserSubscriptionManage
             'connection_config' => $userSub->connection_config ?? null,
             'server_id' => $userSub->server_id ?? null,
             'vpn_access_mode' => $userSub->vpn_access_mode ?? null,
+            'vpn_plan_code' => $userSub->vpn_plan_code ?? null,
+            'vpn_plan_name' => $userSub->vpn_plan_name ?? null,
+            'vpn_traffic_limit_bytes' => $userSub->vpn_traffic_limit_bytes ?? null,
             'note' => $userSub->note ?? null,
         ]);
 
         if ($subscription && $newSubscription && $referral) {
-            $pricing->applyEarning($newSubscription, $subscription, $referrer, $referral);
+            $pricing->applyEarning($newSubscription, $subscription, $referrer, $referral, $this->resolveBasePriceCents($subscription, $userSub));
         }
     }
 
@@ -235,14 +239,14 @@ class AutoUserSubscriptionManage
         Log::info("Processing activation for await payment subscription ID: {$awaitSub->id}");
 
         $subscription = $subs->firstWhere('id', $awaitSub->subscription_id);
-        $subscriptionPrice = $subscription ? $subscription->price : $awaitSub->price;
+        $subscriptionPrice = $subscription ? $this->resolveBasePriceCents($subscription, $awaitSub) : (int) $awaitSub->price;
         $subscriptionName = $subscription ? $subscription->name : $awaitSub->name;
 
         $pricing = app(ReferralPricingService::class);
         $referral = User::query()->find((int) $awaitSub->user_id);
         $referrer = $referral?->referrer;
         if ($subscription && $referral) {
-            $subscriptionPrice = $pricing->getFinalPriceCents($subscription, $referrer, $referral);
+            $subscriptionPrice = $pricing->getFinalPriceCents($subscription, $referrer, $referral, $subscriptionPrice);
         }
 
         $created = UserSubscription::create([
@@ -258,11 +262,14 @@ class AutoUserSubscriptionManage
             'connection_config' => $awaitSub->connection_config ?? null,
             'server_id' => $awaitSub->server_id ?? null,
             'vpn_access_mode' => $awaitSub->vpn_access_mode ?? null,
+            'vpn_plan_code' => $awaitSub->vpn_plan_code ?? null,
+            'vpn_plan_name' => $awaitSub->vpn_plan_name ?? null,
+            'vpn_traffic_limit_bytes' => $awaitSub->vpn_traffic_limit_bytes ?? null,
             'note' => $awaitSub->note ?? null,
         ]);
 
         if ($subscription && $created && $referral) {
-            $pricing->applyEarning($created, $subscription, $referrer, $referral);
+            $pricing->applyEarning($created, $subscription, $referrer, $referral, $this->resolveBasePriceCents($subscription, $awaitSub));
         }
 
         [$meta, $server] = $this->resolveBundleServerTarget($awaitSub->file_path ?? null);
@@ -306,7 +313,7 @@ class AutoUserSubscriptionManage
         $referrer = $referral?->referrer;
         if ($subscription && $referral) {
             $pricing = app(ReferralPricingService::class);
-            $price = $pricing->getFinalPriceCents($subscription, $referrer, $referral);
+            $price = $pricing->getFinalPriceCents($subscription, $referrer, $referral, $this->resolveBasePriceCents($subscription, $userSub));
         }
 
         \Log::info("Checking balance: user_id={$userSub->user_id}, balance=$balance, price=$price");
@@ -419,5 +426,13 @@ class AutoUserSubscriptionManage
     private function peerOperator(): SubscriptionPeerOperator
     {
         return app(SubscriptionPeerOperator::class);
+    }
+
+    private function resolveBasePriceCents(Subscription $subscription, object $userSub): int
+    {
+        return app(VpnPlanCatalog::class)->resolveBasePriceCents(
+            $subscription,
+            (string) ($userSub->vpn_plan_code ?? '')
+        );
     }
 }

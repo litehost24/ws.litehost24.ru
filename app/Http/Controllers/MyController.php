@@ -11,8 +11,10 @@ use App\Models\Subscription;
 use App\Models\TelegramIdentity;
 use App\Models\User;
 use App\Models\UserSubscription;
+use App\Models\UserSubscriptionTopup;
 use App\Models\VpnPeerTrafficDaily;
 use App\Services\ReferralPricingService;
+use App\Services\VpnPlanCatalog;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Validation\ValidatesRequests;
@@ -30,12 +32,15 @@ class MyController extends Controller
     {
         $balance = (new Balance)->getBalanceRub();
         $subListForInfo = collect();
+        $vpnPurchaseOptions = [];
+        $defaultVpnPlanCode = app(VpnPlanCatalog::class)->defaultPurchasePlanCode();
 
         $nextVpnPriceRub = null;
         if (in_array(Auth::user()->role, ['user', 'admin', 'partner'], true)) {
             $userId = (int) Auth::id();
             $subListForInfo = UserSubscription::getCabinetList($userId);
             UserSubscription::attachTrafficTotals($subListForInfo);
+            UserSubscription::attachTrafficPeriodUsage($subListForInfo);
 
             $subs = $subListForInfo
                 ->map(fn ($item) => $item->subscription)
@@ -43,16 +48,23 @@ class MyController extends Controller
                 ->values();
             $vpnSub = Subscription::nextAvailableVpnForUser($userId);
             if ($vpnSub) {
+                $catalog = app(VpnPlanCatalog::class);
                 $pricing = app(ReferralPricingService::class);
                 $referral = Auth::user();
                 $referrer = $referral?->referrer;
-                $finalPrice = $pricing->getFinalPriceCents($vpnSub, $referrer, $referral);
-                $nextVpnPriceRub = (int) ($finalPrice / 100);
+                $vpnPurchaseOptions = $catalog->purchaseOptions($vpnSub, $referrer, $referral);
+                $defaultVpnPlanCode = $catalog->defaultPurchasePlanCode();
+                $selectedOption = collect($vpnPurchaseOptions)->firstWhere('code', $defaultVpnPlanCode)
+                    ?: ($vpnPurchaseOptions[0] ?? null);
+                $nextVpnPriceRub = isset($selectedOption['final_price_rub'])
+                    ? (int) $selectedOption['final_price_rub']
+                    : (int) ($pricing->getFinalPriceCents($vpnSub, $referrer, $referral) / 100);
             }
         } else {
             $subs = Subscription::where('is_hidden', 0)->get();
             $subListForInfo = UserSubscription::getCabinetList((int) Auth::id());
             UserSubscription::attachTrafficTotals($subListForInfo);
+            UserSubscription::attachTrafficPeriodUsage($subListForInfo);
         }
         $userSubInfo = new UserSubscriptionInfo($subListForInfo);
         $latestBySub = UserSubscription::query()
@@ -93,6 +105,8 @@ class MyController extends Controller
             'currentPublication' => $currentPublication,
             'previousPublications' => $previousPublications,
             'nextVpnPriceRub' => $nextVpnPriceRub,
+            'vpnPurchaseOptions' => $vpnPurchaseOptions,
+            'defaultVpnPlanCode' => $defaultVpnPlanCode,
             'hasTelegram' => $hasTelegram,
         ]);
     }
@@ -120,13 +134,35 @@ class MyController extends Controller
                 'created_at',
             ]);
 
+        $topupsHistory = collect();
+        if (Schema::hasTable('user_subscription_topups')) {
+            $topupsHistory = UserSubscriptionTopup::where('user_id', $userId)
+                ->with('userSubscription.subscription:id,name')
+                ->orderBy('created_at', 'desc')
+                ->limit(100)
+                ->get([
+                    'id',
+                    'user_subscription_id',
+                    'topup_code',
+                    'name',
+                    'price',
+                    'traffic_bytes',
+                    'expires_on',
+                    'created_at',
+                ]);
+        }
+
         $totalPayments = (int) Payment::where('user_id', $userId)->sum('amount');
-        $totalCharges = (int) UserSubscription::where('user_id', $userId)->sum('price');
+        $totalCharges = (int) UserSubscription::where('user_id', $userId)->sum('price')
+            + (Schema::hasTable('user_subscription_topups')
+                ? (int) UserSubscriptionTopup::where('user_id', $userId)->sum('price')
+                : 0);
         $balanceCents = $totalPayments - $totalCharges;
 
         return view('payment.operations', [
             'paymentsHistory' => $paymentsHistory,
             'chargesHistory' => $chargesHistory,
+            'topupsHistory' => $topupsHistory,
             'operationsSummary' => [
                 'total_payments' => $totalPayments,
                 'total_charges' => $totalCharges,
@@ -197,9 +233,18 @@ class MyController extends Controller
                 ->groupBy('user_id')
                 ->pluck('total_price', 'user_id');
 
+            $topupChargesByUser = Schema::hasTable('user_subscription_topups')
+                ? UserSubscriptionTopup::query()
+                    ->select('user_id', DB::raw('SUM(price) as total_price'))
+                    ->whereIn('user_id', $referralIds)
+                    ->groupBy('user_id')
+                    ->pluck('total_price', 'user_id')
+                : collect();
+
             foreach ($referralIds as $referralId) {
                 $payments = (int) ($paymentsByUser[$referralId] ?? 0);
-                $charges = (int) ($chargesByUser[$referralId] ?? 0);
+                $charges = (int) ($chargesByUser[$referralId] ?? 0)
+                    + (int) ($topupChargesByUser[$referralId] ?? 0);
                 $balanceByUser[$referralId] = $payments - $charges;
             }
         }

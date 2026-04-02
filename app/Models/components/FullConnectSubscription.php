@@ -8,6 +8,7 @@ use App\Models\components\SubscriptionPackageBuilder;
 use App\Models\Subscription;
 use App\Models\UserSubscription;
 use App\Services\ReferralPricingService;
+use App\Services\VpnPlanCatalog;
 use App\Services\VpnAgent\SubscriptionPeerOperator;
 use App\Support\SubscriptionBundleMeta;
 use Illuminate\Support\Carbon;
@@ -23,12 +24,14 @@ class FullConnectSubscription
     private ?Subscription $sub;
     private ?string $note = null;
     private ?string $vpnAccessMode = null;
+    private ?string $vpnPlanCode = null;
 
-    public function __construct(?Subscription $sub = null, ?string $note = null, ?string $vpnAccessMode = null)
+    public function __construct(?Subscription $sub = null, ?string $note = null, ?string $vpnAccessMode = null, ?string $vpnPlanCode = null)
     {
         $this->sub = $sub;
         $this->note = $note;
         $this->vpnAccessMode = $vpnAccessMode;
+        $this->vpnPlanCode = $vpnPlanCode;
     }
 
     public function create(): void
@@ -36,13 +39,14 @@ class FullConnectSubscription
         $referral = Auth::user();
         $referrer = $referral?->referrer;
         $pricing = app(ReferralPricingService::class);
-        $basePrice = $this->sub ? (int) $this->sub->price : 0;
+        $planSnapshot = $this->resolvePlanSnapshot();
+        $basePrice = $this->sub ? $this->resolveBasePriceCents($planSnapshot['vpn_plan_code'] ?? null) : 0;
         $finalPrice = ($this->sub && $referral)
-            ? $pricing->getFinalPriceCents($this->sub, $referrer, $referral)
+            ? $pricing->getFinalPriceCents($this->sub, $referrer, $referral, $basePrice)
             : $basePrice;
         $resolvedMode = $this->vpnAccessMode !== null && trim($this->vpnAccessMode) !== ''
             ? Server::normalizeVpnAccessMode($this->vpnAccessMode)
-            : null;
+            : ($planSnapshot['vpn_access_mode'] ?? null);
         $resolvedServer = $resolvedMode ? Server::resolvePurchaseServer($resolvedMode) : null;
 
         // Tests should not depend on external server services.
@@ -82,13 +86,16 @@ class FullConnectSubscription
                 'connection_config' => null,
                 'server_id' => $resolvedServer?->id,
                 'vpn_access_mode' => $resolvedMode,
+                'vpn_plan_code' => $planSnapshot['vpn_plan_code'] ?? null,
+                'vpn_plan_name' => $planSnapshot['vpn_plan_name'] ?? null,
+                'vpn_traffic_limit_bytes' => $planSnapshot['vpn_traffic_limit_bytes'] ?? null,
                 'note' => $this->note,
             ]);
             if ($resolvedServer) {
                 $this->peerOperator()->syncServerState($resolvedServer, $testPeerName, 'enabled', (int) Auth::user()->id);
             }
             if ($this->sub && $created && $referral) {
-                $pricing->applyEarning($created, $this->sub, $referrer, $referral);
+                $pricing->applyEarning($created, $this->sub, $referrer, $referral, $basePrice);
             }
             return;
         }
@@ -118,11 +125,14 @@ class FullConnectSubscription
             'connection_config' => null,
             'server_id' => $server->id,
             'vpn_access_mode' => $server->getVpnAccessMode(),
+            'vpn_plan_code' => $planSnapshot['vpn_plan_code'] ?? null,
+            'vpn_plan_name' => $planSnapshot['vpn_plan_name'] ?? null,
+            'vpn_traffic_limit_bytes' => $planSnapshot['vpn_traffic_limit_bytes'] ?? null,
             'note' => $this->note,
         ]);
         $this->peerOperator()->syncServerState($server, (string) ($package['email'] ?? ''), 'enabled', (int) Auth::user()->id);
         if ($this->sub && $created && $referral) {
-            $pricing->applyEarning($created, $this->sub, $referrer, $referral);
+            $pricing->applyEarning($created, $this->sub, $referrer, $referral, $basePrice);
         }
 
         $this->notifyAdmin('Подключение');
@@ -133,9 +143,15 @@ class FullConnectSubscription
         $referral = Auth::user();
         $referrer = $referral?->referrer;
         $pricing = app(ReferralPricingService::class);
-        $basePrice = $this->sub ? (int) $this->sub->price : 0;
+        $latestUserSub = UserSubscription::query()
+            ->where('user_id', (int) Auth::id())
+            ->where('subscription_id', (int) ($this->sub->id ?? 0))
+            ->orderByDesc('id')
+            ->first();
+        $planSnapshot = $this->resolvePlanSnapshot($latestUserSub?->vpn_plan_code);
+        $basePrice = $this->sub ? $this->resolveBasePriceCents($planSnapshot['vpn_plan_code'] ?? null) : 0;
         $finalPrice = ($this->sub && $referral)
-            ? $pricing->getFinalPriceCents($this->sub, $referrer, $referral)
+            ? $pricing->getFinalPriceCents($this->sub, $referrer, $referral, $basePrice)
             : $basePrice;
 
         // Tests should not depend on external server services.
@@ -158,10 +174,13 @@ class FullConnectSubscription
                 'connection_config' => $prevUserSub?->connection_config ?? null,
                 'server_id' => $prevUserSub?->server_id,
                 'vpn_access_mode' => $prevUserSub?->vpn_access_mode,
+                'vpn_plan_code' => $prevUserSub?->vpn_plan_code,
+                'vpn_plan_name' => $prevUserSub?->vpn_plan_name,
+                'vpn_traffic_limit_bytes' => $prevUserSub?->vpn_traffic_limit_bytes,
                 'note' => $prevUserSub?->note ?? $this->note,
             ]);
             if ($this->sub && $created && $referral) {
-                $pricing->applyEarning($created, $this->sub, $referrer, $referral);
+                $pricing->applyEarning($created, $this->sub, $referrer, $referral, $basePrice);
             }
             return;
         }
@@ -188,10 +207,13 @@ class FullConnectSubscription
                 'connection_config' => $userSub->connection_config ?? null,
                 'server_id' => $userSub->server_id ?? null,
                 'vpn_access_mode' => $userSub->vpn_access_mode ?? null,
+                'vpn_plan_code' => $userSub->vpn_plan_code ?? null,
+                'vpn_plan_name' => $userSub->vpn_plan_name ?? null,
+                'vpn_traffic_limit_bytes' => $userSub->vpn_traffic_limit_bytes ?? null,
                 'note' => $note,
             ]);
             if ($this->sub && $created && $referral) {
-                $pricing->applyEarning($created, $this->sub, $referrer, $referral);
+                $pricing->applyEarning($created, $this->sub, $referrer, $referral, $basePrice);
             }
             ///////////////////////////////////////////////////////////////////////////
             //Р В°Р С”РЎвЂљР С‘Р Р†Р В°РЎвЂ Р С‘РЎРЏ
@@ -246,10 +268,13 @@ class FullConnectSubscription
                     'connection_config' => $awaitPaymentSub->connection_config ?? null,
                     'server_id' => $awaitPaymentSub->server_id ?? null,
                     'vpn_access_mode' => $awaitPaymentSub->vpn_access_mode ?? null,
+                    'vpn_plan_code' => $awaitPaymentSub->vpn_plan_code ?? null,
+                    'vpn_plan_name' => $awaitPaymentSub->vpn_plan_name ?? null,
+                    'vpn_traffic_limit_bytes' => $awaitPaymentSub->vpn_traffic_limit_bytes ?? null,
                     'note' => $awaitPaymentSub->note ?? null,
                 ]);
                 if ($this->sub && $created && $referral) {
-                    $pricing->applyEarning($created, $this->sub, $referrer, $referral);
+                    $pricing->applyEarning($created, $this->sub, $referrer, $referral, $basePrice);
                 }
 
             } else {
@@ -273,10 +298,13 @@ class FullConnectSubscription
                     'connection_config' => $prevUserSub?->connection_config ?? null,
                     'server_id' => $prevUserSub?->server_id ?? null,
                     'vpn_access_mode' => $prevUserSub?->vpn_access_mode ?? null,
+                    'vpn_plan_code' => $prevUserSub?->vpn_plan_code ?? null,
+                    'vpn_plan_name' => $prevUserSub?->vpn_plan_name ?? null,
+                    'vpn_traffic_limit_bytes' => $prevUserSub?->vpn_traffic_limit_bytes ?? null,
                     'note' => $prevUserSub?->note ?? null,
                 ]);
                 if ($this->sub && $created && $referral) {
-                    $pricing->applyEarning($created, $this->sub, $referrer, $referral);
+                    $pricing->applyEarning($created, $this->sub, $referrer, $referral, $basePrice);
                 }
 
             }
@@ -362,6 +390,47 @@ class FullConnectSubscription
     private function peerOperator(): SubscriptionPeerOperator
     {
         return app(SubscriptionPeerOperator::class);
+    }
+
+    /**
+     * @return array{vpn_plan_code:?string,vpn_plan_name:?string,vpn_traffic_limit_bytes:?int,vpn_access_mode:?string}
+     */
+    private function resolvePlanSnapshot(?string $fallbackPlanCode = null): array
+    {
+        if (!$this->sub || trim((string) $this->sub->name) !== 'VPN') {
+            return [
+                'vpn_plan_code' => null,
+                'vpn_plan_name' => null,
+                'vpn_traffic_limit_bytes' => null,
+                'vpn_access_mode' => $this->vpnAccessMode,
+            ];
+        }
+
+        $catalog = app(VpnPlanCatalog::class);
+        $planCode = $this->vpnPlanCode !== null && trim($this->vpnPlanCode) !== ''
+            ? $catalog->normalizePlanCode($this->vpnPlanCode)
+            : trim((string) $fallbackPlanCode);
+
+        $snapshot = $catalog->snapshot($planCode);
+        if ($snapshot !== null) {
+            return $snapshot;
+        }
+
+        return [
+            'vpn_plan_code' => null,
+            'vpn_plan_name' => null,
+            'vpn_traffic_limit_bytes' => null,
+            'vpn_access_mode' => $this->vpnAccessMode,
+        ];
+    }
+
+    private function resolveBasePriceCents(?string $planCode): int
+    {
+        if (!$this->sub) {
+            return 0;
+        }
+
+        return app(VpnPlanCatalog::class)->resolveBasePriceCents($this->sub, $planCode);
     }
 }
 

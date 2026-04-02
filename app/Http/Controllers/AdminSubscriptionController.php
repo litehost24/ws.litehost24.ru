@@ -6,6 +6,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionMigration;
 use App\Models\SubscriptionMigrationItem;
 use App\Models\UserSubscription;
+use App\Models\UserSubscriptionTopup;
 use App\Models\User;
 use App\Models\Payment;
 use App\Models\Server;
@@ -374,7 +375,11 @@ class AdminSubscriptionController extends Controller
         $activeSubscriptions = $latestUserSubscriptions->filter(function ($sub) {
             return (bool) $sub->is_active;
         })->count();
-        $totalBalance = Payment::sum('amount') - UserSubscription::sum('price');
+        $totalBalance = Payment::sum('amount')
+            - UserSubscription::sum('price')
+            - (Schema::hasTable('user_subscription_topups')
+                ? UserSubscriptionTopup::sum('price')
+                : 0);
         $siteBanner = SiteBanner::first();
 
         return view('admin.subscriptions.index', [
@@ -674,7 +679,10 @@ class AdminSubscriptionController extends Controller
             ]);
 
         $totalPayments = (int) $payments->sum('amount');
-        $totalCharges = (int) $chargeRows->sum('price');
+        $totalCharges = (int) $chargeRows->sum('price')
+            + (Schema::hasTable('user_subscription_topups')
+                ? (int) UserSubscriptionTopup::where('user_id', $user->id)->sum('price')
+                : 0);
         $balance = (new \App\Models\components\Balance())->getBalance($user->id);
 
         $latestRebillingRows = $chargeRows

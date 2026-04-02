@@ -86,24 +86,111 @@
                     @if (in_array(Auth::user()->role, ['user', 'admin', 'partner'], true))
                         <form method="POST" action="{{ route('user-subscription.add-vpn') }}" class="js-add-vpn-form mt-4">
                             @csrf
-                            <div class="flex flex-wrap items-center gap-3">
-                                <div class="flex-1 min-w-[220px]">
-                                    <input type="text" name="note" maxlength="255" class="w-full h-10 rounded-md border border-gray-300 px-3 text-sm" placeholder="Название устройства (необязательно)" aria-label="Название устройства (необязательно)">
+                            <div class="vpn-purchase-box">
+                                <div class="vpn-purchase-box__top">
+                                    <div class="flex-1 min-w-[220px]">
+                                        <input type="text" name="note" maxlength="255" class="w-full h-10 rounded-md border border-gray-300 px-3 text-sm" placeholder="Название устройства (необязательно)" aria-label="Название устройства (необязательно)">
+                                    </div>
                                 </div>
-                                <label class="inline-flex h-10 items-center gap-2 rounded-md border border-gray-300 bg-gray-50 px-3 text-sm text-gray-700">
-                                    <input type="checkbox" name="need_white_ip" value="1" class="rounded border-gray-300" checked>
-                                    <span>Подключение при ограничениях</span>
-                                </label>
-                                <button type="submit" class="btn btn-primary" style="height:40px;">
-                                    Купить подписку
-                                    <span id="next-vpn-price" class="ms-2 text-xs opacity-90" @if(is_null($nextVpnPriceRub)) style="display:none;" @endif>
-                                        · <span id="next-vpn-price-value">{{ $nextVpnPriceRub }}</span> ₽/мес
-                                    </span>
-                                </button>
+
+                                @if (!empty($vpnPurchaseOptions ?? []))
+                                    @php
+                                        $planCollection = collect($vpnPurchaseOptions ?? []);
+                                        $regularPlanOptions = $planCollection
+                                            ->filter(fn ($plan) => (string) ($plan['vpn_access_mode'] ?? '') === \App\Models\Server::VPN_ACCESS_REGULAR)
+                                            ->values();
+                                        $restrictedPlanOptions = $planCollection
+                                            ->filter(fn ($plan) => (string) ($plan['vpn_access_mode'] ?? '') === \App\Models\Server::VPN_ACCESS_WHITE_IP)
+                                            ->values();
+                                        $displayPurchaseOptions = $regularPlanOptions->concat($restrictedPlanOptions)->values();
+                                    @endphp
+                                    <div class="vpn-plan-grid">
+                                        @foreach($displayPurchaseOptions as $plan)
+                                            @php
+                                                $planCode = (string) ($plan['code'] ?? '');
+                                                $planLimitGb = $plan['traffic_limit_gb'] ?? null;
+                                                $planMode = (string) ($plan['vpn_access_mode'] ?? '');
+                                                $planTrafficText = $planMode === \App\Models\Server::VPN_ACCESS_REGULAR
+                                                    ? 'Безлимит по гигабайтам для обычного подключения'
+                                                    : ($planLimitGb !== null
+                                                        ? ($planLimitGb . ' ГБ в режиме при ограничениях')
+                                                        : 'Без пакета трафика режима при ограничениях');
+                                            @endphp
+                                            <label class="vpn-plan-option">
+                                                <input
+                                                    type="radio"
+                                                    name="vpn_plan_code"
+                                                    value="{{ $planCode }}"
+                                                    class="vpn-plan-option__input"
+                                                    data-plan-label="{{ $plan['label'] ?? $planCode }}"
+                                                    data-plan-price-rub="{{ (int) ($plan['final_price_rub'] ?? 0) }}"
+                                                    data-plan-traffic-text="{{ $planTrafficText }}"
+                                                    data-plan-description="{{ $plan['description'] ?? '' }}"
+                                                    required
+                                                >
+                                                <span class="vpn-plan-option__card">
+                                                    <span class="vpn-plan-option__head">
+                                                        <span class="vpn-plan-option__title-wrap">
+                                                            <span class="vpn-plan-option__icon {{ $planMode === \App\Models\Server::VPN_ACCESS_REGULAR ? 'is-regular' : 'is-restricted' }}" aria-hidden="true">
+                                                                @if($planMode === \App\Models\Server::VPN_ACCESS_REGULAR)
+                                                                    <svg viewBox="0 0 20 20" fill="none">
+                                                                        <path d="M3 8.5 10 3l7 5.5v7a1 1 0 0 1-1 1h-4.5v-4.5h-3V17H4a1 1 0 0 1-1-1v-7.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                                                                    </svg>
+                                                                @else
+                                                                    <svg viewBox="0 0 20 20" fill="none">
+                                                                        <path d="M10 16.5v-2.5m3.7.2a5.2 5.2 0 0 0-7.4 0m10-2.7a9 9 0 0 0-12.6 0m15.3-2.8a12.8 12.8 0 0 0-18 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                                                                    </svg>
+                                                                @endif
+                                                            </span>
+                                                            <span class="vpn-plan-option__title">{{ $plan['label'] ?? $planCode }}</span>
+                                                        </span>
+                                                        <span class="vpn-plan-option__price">{{ (int) ($plan['final_price_rub'] ?? 0) }} ₽/мес</span>
+                                                    </span>
+                                                    <span class="vpn-plan-option__body">
+                                                        @if($planMode === \App\Models\Server::VPN_ACCESS_REGULAR)
+                                                            <span class="vpn-plan-option__traffic vpn-plan-option__traffic--unlimited">Безлимит по гигабайтам</span>
+                                                        @elseif($planLimitGb !== null)
+                                                            <span class="vpn-plan-option__traffic">{{ $planLimitGb }} ГБ в режиме при ограничениях</span>
+                                                        @else
+                                                            <span class="vpn-plan-option__traffic">Без пакета трафика режима при ограничениях</span>
+                                                        @endif
+                                                        @if(!empty($plan['description']))
+                                                            <span class="vpn-plan-option__description">{{ $plan['description'] }}</span>
+                                                        @endif
+                                                    </span>
+                                                </span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                    <div class="vpn-purchase-box__submit">
+                                        <div class="vpn-plan-selected" id="vpn-plan-selected">
+                                            <div class="vpn-plan-selected__title">
+                                                <span id="vpn-plan-selected-label">Сначала выберите тариф выше</span>
+                                            </div>
+                                            <div class="vpn-plan-selected__meta">
+                                                <span id="vpn-plan-selected-traffic">Тариф ещё не выбран</span>
+                                                <span id="vpn-plan-selected-price"></span>
+                                            </div>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary vpn-purchase-box__submit-btn" id="vpn-plan-submit-btn" disabled aria-disabled="true">
+                                            Купить «<span id="vpn-plan-submit-label">тариф</span>»
+                                        </button>
+                                    </div>
+                                @else
+                                    <div class="flex flex-wrap items-center gap-3">
+                                        <label class="inline-flex h-10 items-center gap-2 rounded-md border border-gray-300 bg-gray-50 px-3 text-sm text-gray-700">
+                                            <input type="checkbox" name="need_white_ip" value="1" class="rounded border-gray-300" checked>
+                                            <span>Подключение при ограничениях</span>
+                                        </label>
+                                        <span id="next-vpn-price" class="text-xs text-gray-500" @if(is_null($nextVpnPriceRub)) style="display:none;" @endif>
+                                            Следующая цена: <span id="next-vpn-price-value">{{ $nextVpnPriceRub }}</span> ₽/мес
+                                        </span>
+                                    </div>
+                                @endif
                             </div>
                             <div class="mt-2 text-xs text-gray-500">
-                                Включено: подключение при ограничениях. Выключено: обычное подключение.
-                                Если обычное подключение не работает или интернет работает с ограничениями, включите этот вариант.
+                                Тариф определяет режим подключения и цену продления. Для планов «Эконом», «Стандарт» и «Премиум»
+                                трафик считается только в режиме при ограничениях; обычное подключение остаётся отдельным режимом.
                             </div>
                         </form>
                     @endif
@@ -147,11 +234,169 @@
     .balance__row h4 {
         margin: 0;
     }
+    .vpn-purchase-box {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .vpn-purchase-box__top {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+    }
+    .vpn-plan-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+    }
+    .vpn-plan-option {
+        display: block;
+        cursor: pointer;
+    }
+    .vpn-plan-option__input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+    .vpn-plan-option__card {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 132px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid #d1d5db;
+        background: #f9fafb;
+        transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+    .vpn-plan-option__input:checked + .vpn-plan-option__card {
+        border-color: #2563eb;
+        background: #eff6ff;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, .12);
+    }
+    .vpn-plan-option:hover .vpn-plan-option__card {
+        border-color: #93c5fd;
+        transform: translateY(-1px);
+    }
+    .vpn-plan-option__head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    .vpn-plan-option__title-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+    .vpn-plan-option__icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 9999px;
+        flex: 0 0 auto;
+    }
+    .vpn-plan-option__icon svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+    }
+    .vpn-plan-option__icon.is-regular {
+        background: #ecfdf5;
+        color: #047857;
+    }
+    .vpn-plan-option__icon.is-restricted {
+        background: #eff6ff;
+        color: #2563eb;
+    }
+    .vpn-plan-option__title {
+        font-size: 15px;
+        line-height: 1.2;
+        font-weight: 700;
+        color: #111827;
+    }
+    .vpn-plan-option__price {
+        font-size: 13px;
+        line-height: 1.2;
+        font-weight: 700;
+        color: #1d4ed8;
+        white-space: nowrap;
+    }
+    .vpn-plan-option__body {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .vpn-plan-option__traffic {
+        font-size: 13px;
+        font-weight: 600;
+        color: #1f2937;
+    }
+    .vpn-plan-option__traffic--unlimited {
+        font-size: 14px;
+        font-weight: 800;
+        color: #065f46;
+    }
+    .vpn-plan-option__description {
+        font-size: 12px;
+        line-height: 1.45;
+        color: #6b7280;
+    }
+    .vpn-purchase-box__submit {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .vpn-plan-selected {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid #bfdbfe;
+        background: #eff6ff;
+    }
+    .vpn-plan-selected__title {
+        font-size: 13px;
+        line-height: 1.4;
+        font-weight: 700;
+        color: #1e3a8a;
+    }
+    .vpn-plan-selected__meta {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 8px 14px;
+        font-size: 13px;
+        line-height: 1.4;
+        color: #1f2937;
+    }
+    .vpn-purchase-box__submit-btn {
+        width: 100%;
+        min-height: 44px;
+        justify-content: center;
+    }
+    .vpn-purchase-box__submit-btn[disabled] {
+        opacity: .55;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
     @media (max-width: 768px) {
         .balance__row {
             margin-left: 0;
             width: 100%;
             justify-content: space-between;
+        }
+        .vpn-purchase-box__top {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .vpn-plan-selected__meta {
+            flex-direction: column;
         }
     }
     .service-block__rows {
@@ -332,6 +577,11 @@
         font-weight: 600;
         white-space: nowrap;
     }
+    .service-block__mode-badge--plan {
+        border-color: #d1fae5;
+        background: #ecfdf5;
+        color: #047857;
+    }
     .service-block__note {
         display: inline-flex;
         flex-direction: column;
@@ -423,6 +673,70 @@
         height: 16px;
         margin-right: 8px;
         flex: 0 0 auto;
+    }
+    .service-block__topup {
+        width: 100%;
+        margin-top: 14px;
+        padding: 14px;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        background: #fff;
+    }
+    .service-block__topup-title {
+        color: #111827;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .service-block__topup-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 12px;
+        margin-top: 8px;
+        color: #475569;
+        font-size: 12px;
+        line-height: 1.45;
+    }
+    .service-block__topup-warning {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border: 1px solid #fde68a;
+        border-radius: 12px;
+        background: #fffbeb;
+        color: #92400e;
+        font-size: 12px;
+        line-height: 1.5;
+        font-weight: 600;
+    }
+    .service-block__topup-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+    }
+    .service-block__topup-form {
+        margin: 0;
+    }
+    .service-block__topup-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        width: 100%;
+        min-height: 42px;
+        padding: 0 14px;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        background: #f9fafb;
+        color: #1f2937;
+        font-size: 13px;
+        font-weight: 700;
+        transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+    }
+    .service-block__topup-btn:hover {
+        border-color: #93c5fd;
+        background: #eff6ff;
+        color: #1d4ed8;
     }
     .service-block__status--traffic {
         margin-left: auto;
@@ -540,6 +854,9 @@
         .service-block__status--traffic {
             margin-left: 0;
             text-align: left;
+        }
+        .service-block__topup-grid {
+            grid-template-columns: 1fr;
         }
         .service-block__instruction-cta {
             flex-direction: column;
@@ -1008,6 +1325,57 @@
         wrap.style.display = '';
     }
 
+    function syncVpnPlanSelection(form) {
+        const scope = form || document;
+        const selected = scope.querySelector('input[name="vpn_plan_code"]:checked');
+        const selectedLabel = document.getElementById('vpn-plan-selected-label');
+        const selectedTraffic = document.getElementById('vpn-plan-selected-traffic');
+        const selectedPrice = document.getElementById('vpn-plan-selected-price');
+        const submitLabel = document.getElementById('vpn-plan-submit-label');
+        const submitBtn = document.getElementById('vpn-plan-submit-btn');
+
+        if (!selected) {
+            if (selectedLabel) {
+                selectedLabel.textContent = 'Сначала выберите тариф выше';
+            }
+            if (selectedTraffic) {
+                selectedTraffic.textContent = 'Тариф ещё не выбран';
+            }
+            if (selectedPrice) {
+                selectedPrice.textContent = '';
+            }
+            if (submitLabel) {
+                submitLabel.textContent = 'тариф';
+            }
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.setAttribute('aria-disabled', 'true');
+            }
+            return;
+        }
+
+        const label = selected.dataset.planLabel || 'подписку';
+        const trafficText = selected.dataset.planTrafficText || '';
+        const priceRub = selected.dataset.planPriceRub || '';
+
+        if (selectedLabel) {
+            selectedLabel.textContent = label;
+        }
+        if (selectedTraffic) {
+            selectedTraffic.textContent = trafficText;
+        }
+        if (selectedPrice) {
+            selectedPrice.textContent = priceRub ? (priceRub + ' ₽/мес') : '';
+        }
+        if (submitLabel) {
+            submitLabel.textContent = label;
+        }
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.setAttribute('aria-disabled', 'false');
+        }
+    }
+
     function attachNoteForm(form) {
         if (!form || form.dataset.noteBound) return;
         form.dataset.noteBound = '1';
@@ -1249,6 +1617,13 @@
     document.addEventListener('DOMContentLoaded', function () {
         const addForm = document.querySelector('.js-add-vpn-form');
         if (addForm) {
+            addForm.addEventListener('change', function (event) {
+                if (event.target && event.target.matches('input[name="vpn_plan_code"]')) {
+                    syncVpnPlanSelection(addForm);
+                }
+            });
+            syncVpnPlanSelection(addForm);
+
             addForm.addEventListener('submit', async function (event) {
                 event.preventDefault();
 

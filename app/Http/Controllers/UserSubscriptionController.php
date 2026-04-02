@@ -9,9 +9,12 @@ use App\Models\components\WireguardQrCode;
 use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\UserSubscription;
+use App\Models\UserSubscriptionTopup;
 use App\Services\VpnAgent\SubscriptionArchiveBuilder;
 use App\Services\VpnAgent\SubscriptionVpnAccessModeSwitcher;
 use App\Services\ReferralPricingService;
+use App\Services\VpnPlanCatalog;
+use App\Services\VpnTopupCatalog;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Http\RedirectResponse;
@@ -371,6 +374,7 @@ class UserSubscriptionController extends Controller
         $data = $request->validate([
             'note' => ['nullable', 'string', 'max:255'],
             'need_white_ip' => ['nullable', 'boolean'],
+            'vpn_plan_code' => ['nullable', 'string', 'max:64'],
         ]);
 
         $userId = (int) Auth::id();
@@ -383,9 +387,12 @@ class UserSubscriptionController extends Controller
         }
 
         $pricing = app(ReferralPricingService::class);
+        $catalog = app(VpnPlanCatalog::class);
         $referral = Auth::user();
         $referrer = $referral?->referrer;
-        $finalPrice = $pricing->getFinalPriceCents($sub, $referrer, $referral);
+        $planCode = $this->resolveRequestedVpnPlanCode($request, $sub);
+        $basePrice = $catalog->resolveBasePriceCents($sub, $planCode);
+        $finalPrice = $pricing->getFinalPriceCents($sub, $referrer, $referral, $basePrice);
 
         if ((new Balance)->getBalance() < $finalPrice) {
             if ($request->expectsJson()) {
@@ -395,11 +402,7 @@ class UserSubscriptionController extends Controller
         }
 
         try {
-            $vpnAccessMode = $request->boolean('need_white_ip')
-                ? Server::VPN_ACCESS_WHITE_IP
-                : Server::VPN_ACCESS_REGULAR;
-
-            $fullConnectSubscription = new FullConnectSubscription($sub, $data['note'] ?? null, $vpnAccessMode);
+            $fullConnectSubscription = new FullConnectSubscription($sub, $data['note'] ?? null, null, $planCode);
             $fullConnectSubscription->create();
         } catch (\Exception $e) {
             \Log::error('Subscription add VPN error: ' . $e->getMessage());
@@ -474,6 +477,119 @@ class UserSubscriptionController extends Controller
         return redirect()->back()->with('subscription-success', 'Пометка обновлена.');
     }
 
+    public function purchaseTopup(Request $request): RedirectResponse|JsonResponse
+    {
+        if (!in_array(Auth::user()->role, ['user', 'admin', 'partner'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Покупка пакета трафика недоступна.'], 403, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Покупка пакета трафика недоступна.');
+        }
+
+        if (!\Illuminate\Support\Facades\Schema::hasTable('user_subscription_topups')) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Покупка пакета трафика временно недоступна.'], 503, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Покупка пакета трафика временно недоступна.');
+        }
+
+        $data = $request->validate([
+            'user_subscription_id' => ['required', 'integer', 'min:1'],
+            'topup_code' => ['required', 'string', 'max:64'],
+        ]);
+
+        $userSub = $this->findVisibleUserSubscription((int) $data['user_subscription_id']);
+        if (!$userSub) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Подписка не найдена.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Подписка не найдена.');
+        }
+
+        if (!$userSub->isLocallyActive()) {
+            $message = 'Пакет трафика можно добавить только к активной подписке.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
+        if ($userSub->vpnTrafficLimitBytes() === null) {
+            $message = 'Для обычного подключения докупка трафика не требуется.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
+        $package = app(VpnTopupCatalog::class)->find((string) $data['topup_code']);
+        if ($package === null) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Пакет трафика не найден.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Пакет трафика не найден.');
+        }
+
+        $expiresOn = trim((string) ($userSub->end_date ?? ''));
+        if ($expiresOn === '' || $expiresOn === UserSubscription::AWAIT_PAYMENT_DATE) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Не удалось определить срок действия пакета.'], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Не удалось определить срок действия пакета.');
+        }
+
+        $userId = (int) Auth::id();
+        $topup = DB::transaction(function () use ($userId, $userSub, $package, $expiresOn) {
+            DB::table('users')
+                ->where('id', $userId)
+                ->lockForUpdate()
+                ->first();
+
+            if ((new Balance)->getBalance($userId) < (int) $package['price_cents']) {
+                return null;
+            }
+
+            return UserSubscriptionTopup::query()->create([
+                'user_subscription_id' => (int) $userSub->id,
+                'user_id' => $userId,
+                'topup_code' => (string) $package['code'],
+                'name' => (string) $package['label'],
+                'price' => (int) $package['price_cents'],
+                'traffic_bytes' => (int) $package['traffic_bytes'],
+                'expires_on' => Carbon::parse($expiresOn)->toDateString(),
+            ]);
+        });
+
+        if (!$topup) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Недостаточно средств'], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Недостаточно средств');
+        }
+
+        $message = sprintf(
+            'Пакет %s добавлен до %s. Неиспользованный остаток на следующий период не переносится.',
+            (string) $package['label'],
+            Carbon::parse($expiresOn)->format('d.m.Y')
+        );
+
+        if ($request->expectsJson()) {
+            return $this->subscriptionCardJson($userSub->subscription, $message, (int) $userSub->id);
+        }
+
+        return redirect()->back()->with('subscription-success', $message);
+    }
+
     public function toggleRebill(): RedirectResponse|JsonResponse
     {
         $subId = request()->get('id');
@@ -541,6 +657,18 @@ class UserSubscriptionController extends Controller
         }
 
         $targetMode = Server::normalizeVpnAccessMode((string) $data['vpn_access_mode']);
+        if (!$userSub->canSwitchToVpnAccessMode($targetMode)) {
+            $message = $targetMode === Server::VPN_ACCESS_WHITE_IP
+                ? 'Для текущего тарифа подключение при ограничениях недоступно.'
+                : 'Смена типа подключения недоступна.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
         if ($userSub->resolveVpnAccessMode() === $targetMode) {
             if ($request->expectsJson()) {
                 return $this->subscriptionCardJson($userSub->subscription, 'Этот тип уже выбран.', (int) $userSub->id);
@@ -632,6 +760,7 @@ class UserSubscriptionController extends Controller
     {
         $subListForInfo = UserSubscription::getCabinetList((int) Auth::id());
         UserSubscription::attachTrafficTotals($subListForInfo);
+        UserSubscription::attachTrafficPeriodUsage($subListForInfo);
         $displayUserSub = $subListForInfo->firstWhere('id', (int) $userSub->id);
         if (!$displayUserSub) {
             $displayUserSub = $subListForInfo->firstWhere('subscription_id', (int) $userSub->subscription_id);
@@ -657,6 +786,7 @@ class UserSubscriptionController extends Controller
     {
         $subListForInfo = UserSubscription::getCabinetList((int) Auth::id());
         UserSubscription::attachTrafficTotals($subListForInfo);
+        UserSubscription::attachTrafficPeriodUsage($subListForInfo);
 
         return view('payment.service-block__rows', [
             'cards' => $subListForInfo,
@@ -673,12 +803,33 @@ class UserSubscriptionController extends Controller
             return null;
         }
 
+        $catalog = app(VpnPlanCatalog::class);
         $pricing = app(ReferralPricingService::class);
         $referral = Auth::user();
         $referrer = $referral?->referrer;
-        $finalPrice = $pricing->getFinalPriceCents($vpnSub, $referrer, $referral);
+        $basePrice = $catalog->resolveBasePriceCents($vpnSub, $catalog->defaultPurchasePlanCode());
+        $finalPrice = $pricing->getFinalPriceCents($vpnSub, $referrer, $referral, $basePrice);
 
         return (int) ($finalPrice / 100);
+    }
+
+    private function resolveRequestedVpnPlanCode(Request $request, Subscription $subscription): ?string
+    {
+        if (trim((string) $subscription->name) !== 'VPN') {
+            return null;
+        }
+
+        $catalog = app(VpnPlanCatalog::class);
+        $planCode = trim((string) $request->input('vpn_plan_code', ''));
+        if ($planCode !== '') {
+            return $catalog->normalizePlanCode($planCode);
+        }
+
+        if ($request->boolean('need_white_ip')) {
+            return $catalog->defaultRestrictedPlanCode();
+        }
+
+        return $catalog->defaultRegularPlanCode();
     }
 
     private function vpnAccessModePreparedMessage(UserSubscription $userSub): string
