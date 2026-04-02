@@ -273,9 +273,12 @@
                                         $planSuffix = ($plan['traffic_limit_gb'] ?? null) !== null
                                             ? ($plan['traffic_limit_gb'] . ' ГБ')
                                             : 'безлимит';
+                                        $planIcon = (($plan['vpn_access_mode'] ?? null) === \App\Models\Server::VPN_ACCESS_REGULAR)
+                                            ? '🏠'
+                                            : '📶';
                                     @endphp
                                     <option value="{{ $plan['code'] }}" {{ $nextVpnPlanCode === (string) $plan['code'] ? 'selected' : '' }}>
-                                        {{ $plan['label'] }} — {{ (int) ($plan['final_price_rub'] ?? 0) }} ₽/мес · {{ $planSuffix }}
+                                        {{ $planIcon }} {{ $plan['label'] }} — {{ (int) ($plan['final_price_rub'] ?? 0) }} ₽/мес · {{ $planSuffix }}
                                     </option>
                                 @endforeach
                             </select>
