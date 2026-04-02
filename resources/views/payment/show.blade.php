@@ -678,12 +678,13 @@
         width: 100%;
         margin-top: 14px;
         padding: 14px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid #dbe3ef;
         border-radius: 14px;
-        background: #fff;
+        background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
     }
     .service-block__topup-title {
-        color: #111827;
+        color: #0f172a;
         font-size: 14px;
         font-weight: 700;
         line-height: 1.2;
@@ -693,7 +694,7 @@
         flex-wrap: wrap;
         gap: 6px 12px;
         margin-top: 8px;
-        color: #475569;
+        color: #526173;
         font-size: 12px;
         line-height: 1.45;
     }

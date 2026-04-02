@@ -21,6 +21,9 @@
     $switchTargetMode = $userSub?->switchTargetVpnAccessMode();
     $switchTargetLabel = $switchTargetMode ? (\App\Models\Server::vpnAccessModeOptions()[$switchTargetMode] ?? null) : null;
     $canSwitchVpnAccessMode = $userSub?->canSwitchVpnAccessMode() ?? false;
+    $isLegacyVpnCard = $userSub
+        ? trim((string) ($userSub->vpn_plan_code ?? '')) === ''
+        : false;
     $pendingVpnAccessModeDisconnectAt = $userSub?->pendingVpnAccessModeDisconnectAt();
     $hasPendingVpnAccessModeSwitch = $userSub?->hasPendingVpnAccessModeSwitch() ?? false;
     $pendingVpnAccessModeText = $pendingVpnAccessModeDisconnectAt
@@ -268,7 +271,7 @@
             </a>
         @endif
 
-        @if ($canSwitchVpnAccessMode && $switchTargetMode && $switchTargetLabel && $userSub)
+        @if ($isLegacyVpnCard && $canSwitchVpnAccessMode && $switchTargetMode && $switchTargetLabel && $userSub)
             <a href="{{ route('user-subscription.switch-vpn-access-mode', ['user_subscription_id' => (int) $userSub->id, 'vpn_access_mode' => $switchTargetMode]) }}"
                class="js-sub-action service-block__action-btn service-block__action-btn--secondary"
                data-action="switch-mode"
@@ -302,7 +305,7 @@
             <div class="service-block__switch-pending">
                 {{ $pendingVpnAccessModeText }}
             </div>
-        @elseif ($canSwitchVpnAccessMode && $subInfo->isConnected() && !$subInfo->isExpired())
+        @elseif ($isLegacyVpnCard && $canSwitchVpnAccessMode && $subInfo->isConnected() && !$subInfo->isExpired())
             <div class="service-block__switch-hint">
                 После переключения старая настройка будет работать ещё 5 минут, затем отключится автоматически.
             </div>
