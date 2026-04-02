@@ -659,6 +659,7 @@ class UserSubscriptionController extends Controller
 
         $userSub->update([
             'next_vpn_plan_code' => $planCode,
+            'is_rebilling' => true,
         ]);
 
         $message = sprintf(
@@ -683,6 +684,16 @@ class UserSubscriptionController extends Controller
 
         if ($userSub) {
             $sub = $userSub->subscription ?: Subscription::where('id', $subId)->first();
+
+            if ($userSub->isLegacyVpnPlan() && $sub && trim((string) $sub->name) === 'VPN') {
+                $message = 'Для старого тарифа автопродление недоступно. Выберите новый тариф со следующего периода.';
+
+                if (request()->expectsJson()) {
+                    return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+                }
+
+                return redirect()->back()->with('subscription-error', $message);
+            }
 
             if ($action === 'disable') {
                 $userSub->update(['is_rebilling' => false]);

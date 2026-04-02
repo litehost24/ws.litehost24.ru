@@ -38,7 +38,7 @@ class UserSubscriptionScheduleNextPlanTest extends TestCase
             'price' => 5000,
             'action' => 'create',
             'is_processed' => true,
-            'is_rebilling' => true,
+            'is_rebilling' => false,
             'end_date' => Carbon::today()->addDays(20)->toDateString(),
             'file_path' => 'files/' . $user->id . '_peerlegacy_' . $server->id . '_31_03_2026_18_00.zip',
             'server_id' => $server->id,
@@ -58,6 +58,7 @@ class UserSubscriptionScheduleNextPlanTest extends TestCase
         $this->assertDatabaseHas('user_subscriptions', [
             'id' => $userSub->id,
             'next_vpn_plan_code' => 'restricted_standard',
+            'is_rebilling' => true,
         ]);
     }
 
@@ -103,6 +104,53 @@ class UserSubscriptionScheduleNextPlanTest extends TestCase
         $response->assertStatus(422);
         $response->assertJson([
             'message' => 'Для нового тарифа выбор на следующий период не требуется.',
+        ]);
+    }
+
+    public function test_legacy_card_cannot_toggle_old_rebilling_directly(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+
+        $server = Server::query()->create([
+            'ip1' => '84.23.55.167',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        $userSub = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 5000,
+            'action' => 'create',
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(20)->toDateString(),
+            'file_path' => 'files/' . $user->id . '_peerlegacytoggle_' . $server->id . '_31_03_2026_18_00.zip',
+            'server_id' => $server->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'vpn_plan_code' => null,
+            'vpn_plan_name' => null,
+            'vpn_traffic_limit_bytes' => null,
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/user-subscription/toggle-rebill?action=disable&id=' . $subscription->id . '&user_subscription_id=' . $userSub->id);
+
+        $response->assertStatus(422);
+        $response->assertJson([
+            'message' => 'Для старого тарифа автопродление недоступно. Выберите новый тариф со следующего периода.',
+        ]);
+
+        $this->assertDatabaseHas('user_subscriptions', [
+            'id' => $userSub->id,
+            'is_rebilling' => true,
         ]);
     }
 }

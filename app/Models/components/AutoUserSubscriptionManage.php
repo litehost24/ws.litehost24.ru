@@ -77,6 +77,11 @@ class AutoUserSubscriptionManage
                 continue;
             }
 
+            if ($this->shouldStopLegacyVpnWithoutNextPlan($userSub, $subs)) {
+                $this->deactivate($userSub, true, 'Для продления выберите новый тариф.');
+                continue;
+            }
+
             if ($this->isEnoughBalance($userSub)) {
                 $this->processRebilling($userSub, $subs);
             } else {
@@ -367,7 +372,7 @@ class AutoUserSubscriptionManage
         return $price <= $balance;
     }
 
-    private function deactivate(object $userSub): void
+    private function deactivate(object $userSub, bool $stopRebilling = false, ?string $successMessage = null): void
     {
         if (!$userSub || !isset($userSub->id) || !isset($userSub->user_id) || !isset($userSub->subscription_id)) {
             Log::error('Invalid userSub object in deactivate method');
@@ -418,6 +423,12 @@ class AutoUserSubscriptionManage
             $updateData['action'] = 'deactivate';
             $updateData['is_processed'] = false;
             $updateData['action_attempts'] = 0;
+            if ($stopRebilling) {
+                $updateData['is_rebilling'] = false;
+            }
+            if ($successMessage !== null && trim($successMessage) !== '') {
+                $updateData['action_error'] = $successMessage;
+            }
         } else {
             $attempts = (int) ($userSub->action_attempts ?? 0) + 1;
             $updateData['action_attempts'] = $attempts;
@@ -472,6 +483,17 @@ class AutoUserSubscriptionManage
     private function peerOperator(): SubscriptionPeerOperator
     {
         return app(SubscriptionPeerOperator::class);
+    }
+
+    private function shouldStopLegacyVpnWithoutNextPlan(object $userSub, Collection $subs): bool
+    {
+        $subscription = $subs->firstWhere('id', $userSub->subscription_id);
+        if (!$subscription || trim((string) $subscription->name) !== 'VPN') {
+            return false;
+        }
+
+        return trim((string) ($userSub->vpn_plan_code ?? '')) === ''
+            && trim((string) ($userSub->next_vpn_plan_code ?? '')) === '';
     }
 
     private function currentPlanSnapshot(object $userSub): array

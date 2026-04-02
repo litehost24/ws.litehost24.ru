@@ -217,6 +217,49 @@ class UserSubscriptionAutoTest extends TestCase
         $this->assertNull($result->last()->next_vpn_plan_code);
     }
 
+    public function test_legacy_vpn_without_selected_next_plan_does_not_renew(): void
+    {
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+        $user = User::factory()->create();
+        Payment::factory()->create([
+            'user_id' => $user->id,
+            'amount' => 50000,
+        ]);
+
+        $server = $this->createNodeServer();
+        $expiredDate = Carbon::today()->subDay()->toDateString();
+
+        UserSubscription::factory()->create([
+            'subscription_id' => $subscription->id,
+            'user_id' => $user->id,
+            'price' => 5000,
+            'end_date' => $expiredDate,
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'file_path' => $this->bundlePath($user->id, 'legacyexpired', $server->id),
+            'server_id' => $server->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'vpn_plan_code' => null,
+            'vpn_plan_name' => null,
+            'vpn_traffic_limit_bytes' => null,
+            'next_vpn_plan_code' => null,
+        ]);
+
+        (new AutoUserSubscriptionManage())->start();
+
+        $result = UserSubscription::query()->orderBy('id')->get();
+
+        $this->assertCount(1, $result);
+        $this->assertSame('deactivate', (string) $result->first()->action);
+        $this->assertSame(0, (int) $result->first()->is_processed);
+        $this->assertSame(0, (int) $result->first()->is_rebilling);
+        $this->assertSame('success', (string) $result->first()->action_status);
+        $this->assertSame('Для продления выберите новый тариф.', (string) $result->first()->action_error);
+    }
+
     private function createNodeServer(): Server
     {
         return Server::query()->create([

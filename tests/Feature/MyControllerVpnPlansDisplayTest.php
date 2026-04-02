@@ -130,5 +130,8 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertSee('Старый тариф', false);
         $response->assertSee('Этот тариф больше не оформляется.', false);
         $response->assertSee('Выбрать новый тариф со следующего периода', false);
+        $response->assertSee('Без выбора нового тарифа подписка остановится в дату окончания.', false);
+        $response->assertDontSee('Отключить автопродление', false);
+        $response->assertDontSee('Включить автопродление', false);
     }
 }

@@ -249,9 +249,9 @@
                     {{ $nextVpnPlanLabel ? 'Изменить тариф на следующий период' : 'Выбрать новый тариф со следующего периода' }}
                 </summary>
                 <div class="service-block__legacy-plan-body">
-                    <div class="service-block__legacy-plan-hint">
-                        Текущий тариф продолжит работать до конца оплаченного периода.
-                    </div>
+                <div class="service-block__legacy-plan-hint">
+                        Текущий тариф продолжит работать до конца оплаченного периода. Без выбора нового тарифа подписка остановится в дату окончания.
+                </div>
                     <form method="POST" action="{{ route('user-subscription.next-vpn-plan') }}" class="service-block__legacy-plan-form">
                         @csrf
                         <input type="hidden" name="user_subscription_id" value="{{ (int) $userSub->id }}">
@@ -317,24 +317,26 @@
     @endif
 
         <div class="mt-3 text-sm service-block__bottom-side">
-        @if (!$subInfo->isRebillActive())
-            <a href="{{ $subInfo->isConnected() ? '/user-subscription/toggle-rebill?action=enable&id=' . $sub->id . $userSubscriptionQuery : '/user-subscription/connect?id=' . $sub->id . $userSubscriptionQuery }}"
-               class="js-sub-action service-block__action-btn service-block__action-btn--primary"
-               data-action="connect">
-                @if ($subInfo->isConnected())
-                    Включить автопродление <span class="service-block__action-arrow">→</span>
-                @elseif ($canConnectNow)
-                    Подключить <span class="service-block__action-arrow">→</span>
-                @else
-                    Подключить <span class="service-block__action-arrow">→</span>
-                @endif
-            </a>
-        @else
-            <a href="/user-subscription/toggle-rebill?action=disable&id={{ $sub->id }}{{ $userSubscriptionQuery }}"
-               class="js-sub-action service-block__action-btn service-block__action-btn--danger"
-               data-confirm="Вы уверены, что хотите отключить автопродление?">
-                Отключить автопродление
-            </a>
+        @if (!$isLegacyVpnCard)
+            @if (!$subInfo->isRebillActive())
+                <a href="{{ $subInfo->isConnected() ? '/user-subscription/toggle-rebill?action=enable&id=' . $sub->id . $userSubscriptionQuery : '/user-subscription/connect?id=' . $sub->id . $userSubscriptionQuery }}"
+                   class="js-sub-action service-block__action-btn service-block__action-btn--primary"
+                   data-action="connect">
+                    @if ($subInfo->isConnected())
+                        Включить автопродление <span class="service-block__action-arrow">→</span>
+                    @elseif ($canConnectNow)
+                        Подключить <span class="service-block__action-arrow">→</span>
+                    @else
+                        Подключить <span class="service-block__action-arrow">→</span>
+                    @endif
+                </a>
+            @else
+                <a href="/user-subscription/toggle-rebill?action=disable&id={{ $sub->id }}{{ $userSubscriptionQuery }}"
+                   class="js-sub-action service-block__action-btn service-block__action-btn--danger"
+                   data-confirm="Вы уверены, что хотите отключить автопродление?">
+                    Отключить автопродление
+                </a>
+            @endif
         @endif
 
         @if ($isLegacyVpnCard && $canSwitchVpnAccessMode && $switchTargetMode && $switchTargetLabel && $userSub)
