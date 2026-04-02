@@ -188,9 +188,18 @@
                     Заявка в обработке на подключение
                 </span>
             @elseif ($subInfo->isRebillActive())
-                <span class="{{ $statusColorClass }} service-block__status">
-                    очередное списание {{ $subInfo->getEndDate() }}
-                </span>
+                @if ($isLegacyVpnCard)
+                    <span class="{{ $statusColorClass }} service-block__status">
+                        старый тариф действует до {{ $subInfo->getEndDate() }}
+                        @if ($nextVpnPlanLabel)
+                            , затем — {{ $nextVpnPlanLabel }}
+                        @endif
+                    </span>
+                @else
+                    <span class="{{ $statusColorClass }} service-block__status">
+                        очередное списание {{ $subInfo->getEndDate() }}
+                    </span>
+                @endif
             @elseif ($subInfo->isConnected())
                 <span class="{{ $connectedStatusClass }} service-block__status">
                     подписка истекает {{ $subInfo->getEndDate() }}
