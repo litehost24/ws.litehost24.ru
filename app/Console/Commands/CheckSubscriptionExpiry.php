@@ -3,11 +3,14 @@
 namespace App\Console\Commands;
 
 use App\Mail\SubscriptionExpiryNotification;
+use App\Models\Server;
 use App\Models\TelegramIdentity;
 use App\Models\User;
 use App\Models\UserSubscription;
 use App\Models\components\Balance;
+use App\Services\ReferralPricingService;
 use App\Services\Telegram\TelegramBotService;
+use App\Services\VpnPlanCatalog;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -45,32 +48,26 @@ class CheckSubscriptionExpiry extends Command
             ->with(['user', 'subscription'])
             ->get();
 
+        $balanceComponent = new Balance();
+
         // Группируем подписки по пользователям
         $userSubscriptionsGrouped = [];
         foreach ($userSubscriptions as $userSubscription) {
-            // Проверяем баланс пользователя
-            $balanceComponent = new Balance();
             $balance = $balanceComponent->getBalance($userSubscription->user_id);
+            $notice = $this->buildExpiryNotice($userSubscription, (int) $balance);
+            if ($notice === null) {
+                continue;
+            }
 
-            // Если баланс 0 или меньше, добавляем подписку в список для уведомления
-            if ($balance <= 0) {
-                if (!isset($userSubscriptionsGrouped[$userSubscription->user_id])) {
-                    $userSubscriptionsGrouped[$userSubscription->user_id] = [
-                        'user' => $userSubscription->user,
-                        'balance' => $balance,
-                        'subscriptions' => []
-                    ];
-                }
-
-                // Вычисляем количество дней до окончания подписки
-                $daysUntilExpiry = Carbon::parse($userSubscription->end_date)->diffInDays(Carbon::now(), false);
-
-                $userSubscriptionsGrouped[$userSubscription->user_id]['subscriptions'][] = [
-                    'subscription' => $userSubscription->subscription,
-                    'days_until_expiry' => abs($daysUntilExpiry),
-                    'end_date' => $userSubscription->end_date
+            if (!isset($userSubscriptionsGrouped[$userSubscription->user_id])) {
+                $userSubscriptionsGrouped[$userSubscription->user_id] = [
+                    'user' => $userSubscription->user,
+                    'balance' => $balance,
+                    'subscriptions' => []
                 ];
             }
+
+            $userSubscriptionsGrouped[$userSubscription->user_id]['subscriptions'][] = $notice;
         }
 
         $notificationsSent = 0;
@@ -116,16 +113,28 @@ class CheckSubscriptionExpiry extends Command
             return;
         }
 
-        $lines = [
-            'Подписка скоро заканчивается.',
-        ];
+        $hasLowBalance = collect($subscriptions)->contains(function (array $subInfo): bool {
+            return in_array((string) ($subInfo['kind'] ?? ''), ['low_balance', 'legacy_next_plan_low_balance'], true);
+        });
+        $hasLegacySelection = collect($subscriptions)->contains(function (array $subInfo): bool {
+            return (string) ($subInfo['kind'] ?? '') === 'legacy_choose_plan';
+        });
+
+        $lines = ['Подписка скоро заканчивается.'];
         foreach ($subscriptions as $subInfo) {
-            $subName = (string) ($subInfo['subscription']->name ?? 'Подписка');
-            $endDate = Carbon::parse($subInfo['end_date'])->format('d.m.Y');
-            $daysLeft = (int) ($subInfo['days_until_expiry'] ?? 0);
-            $lines[] = "{$subName}: до {$endDate} ({$daysLeft} дн.)";
+            $lines[] = $this->formatTelegramExpiryLine($subInfo);
+
+            if (!empty($subInfo['needs_new_config'])) {
+                $lines[] = 'После продления понадобится новая инструкция и новый конфиг.';
+            }
         }
-        $lines[] = 'Пополните баланс, чтобы избежать отключения.';
+
+        if ($hasLowBalance) {
+            $lines[] = 'Пополните баланс, чтобы избежать отключения.';
+        }
+        if ($hasLegacySelection) {
+            $lines[] = 'Откройте личный кабинет и выберите новый тариф.';
+        }
 
         try {
             app(TelegramBotService::class)->sendSystemMessage((int) $identity->telegram_chat_id, implode("\n", $lines));
@@ -138,5 +147,112 @@ class CheckSubscriptionExpiry extends Command
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function buildExpiryNotice(UserSubscription $userSubscription, int $balanceCents): ?array
+    {
+        $subscription = $userSubscription->subscription;
+        if (!$subscription) {
+            return null;
+        }
+
+        $daysUntilExpiry = abs(Carbon::parse($userSubscription->end_date)->diffInDays(Carbon::now(), false));
+        $notice = [
+            'subscription' => $subscription,
+            'days_until_expiry' => $daysUntilExpiry,
+            'end_date' => $userSubscription->end_date,
+            'next_plan_label' => $userSubscription->nextVpnPlanLabel(),
+            'needs_new_config' => $this->needsNewConfigForNextPlan($userSubscription),
+        ];
+
+        $isVpn = trim((string) $subscription->name) === 'VPN';
+        $isLegacy = $isVpn && $userSubscription->isLegacyVpnPlan();
+        $hasNextPlan = trim((string) ($userSubscription->next_vpn_plan_code ?? '')) !== '';
+
+        if ($isLegacy && !$hasNextPlan) {
+            return $notice + ['kind' => 'legacy_choose_plan'];
+        }
+
+        $upcomingPriceCents = $this->resolveUpcomingPriceCents($userSubscription);
+        if ($isLegacy && $hasNextPlan) {
+            if ($upcomingPriceCents > $balanceCents) {
+                return $notice + [
+                    'kind' => 'legacy_next_plan_low_balance',
+                    'price_rub' => (int) round($upcomingPriceCents / 100),
+                    'missing_rub' => (int) ceil(($upcomingPriceCents - $balanceCents) / 100),
+                ];
+            }
+
+            return $notice + ['kind' => 'legacy_next_plan_ready'];
+        }
+
+        if ($userSubscription->is_rebilling && $upcomingPriceCents > $balanceCents) {
+            return $notice + [
+                'kind' => 'low_balance',
+                'price_rub' => (int) round($upcomingPriceCents / 100),
+                'missing_rub' => (int) ceil(($upcomingPriceCents - $balanceCents) / 100),
+            ];
+        }
+
+        return null;
+    }
+
+    private function resolveUpcomingPriceCents(UserSubscription $row): int
+    {
+        $subscription = $row->subscription;
+        if (!$subscription) {
+            return (int) ($row->price ?? 0);
+        }
+
+        $basePrice = (int) $subscription->price;
+        if (trim((string) $subscription->name) === 'VPN') {
+            $planCode = trim((string) ($row->next_vpn_plan_code ?? ''));
+            if ($planCode === '') {
+                $planCode = trim((string) ($row->vpn_plan_code ?? ''));
+            }
+
+            $basePrice = app(VpnPlanCatalog::class)->resolveBasePriceCents($subscription, $planCode);
+        }
+
+        $user = $row->user ?: User::query()->find((int) $row->user_id);
+        if (!$user) {
+            return $basePrice;
+        }
+
+        return app(ReferralPricingService::class)->getFinalPriceCents($subscription, $user->referrer, $user, $basePrice);
+    }
+
+    private function needsNewConfigForNextPlan(UserSubscription $row): bool
+    {
+        $nextPlan = $row->nextVpnPlan();
+        if ($nextPlan === null) {
+            return false;
+        }
+
+        $currentMode = $row->resolveVpnAccessMode();
+        $nextMode = Server::normalizeVpnAccessMode((string) ($nextPlan['vpn_access_mode'] ?? ''));
+
+        return $currentMode !== null && $currentMode !== $nextMode;
+    }
+
+    /**
+     * @param array<string, mixed> $subInfo
+     */
+    private function formatTelegramExpiryLine(array $subInfo): string
+    {
+        $subName = (string) ($subInfo['subscription']->name ?? 'Подписка');
+        $endDate = Carbon::parse((string) $subInfo['end_date'])->format('d.m.Y');
+        $daysLeft = (int) ($subInfo['days_until_expiry'] ?? 0);
+
+        return match ((string) ($subInfo['kind'] ?? '')) {
+            'legacy_choose_plan' => "{$subName}: до {$endDate} ({$daysLeft} дн.). Старый тариф больше не продлевается автоматически, выберите новый тариф.",
+            'legacy_next_plan_ready' => "{$subName}: до {$endDate} ({$daysLeft} дн.). Затем — " . (string) ($subInfo['next_plan_label'] ?? 'новый тариф') . '.',
+            'legacy_next_plan_low_balance' => "{$subName}: до {$endDate} ({$daysLeft} дн.). Затем — " . (string) ($subInfo['next_plan_label'] ?? 'новый тариф') . ". Цена {$subInfo['price_rub']} ₽, не хватает {$subInfo['missing_rub']} ₽.",
+            'low_balance' => "{$subName}: до {$endDate} ({$daysLeft} дн.). Цена {$subInfo['price_rub']} ₽, не хватает {$subInfo['missing_rub']} ₽.",
+            default => "{$subName}: до {$endDate} ({$daysLeft} дн.).",
+        };
     }
 }

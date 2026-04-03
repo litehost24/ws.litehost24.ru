@@ -5,23 +5,84 @@
     <title>Уведомление об окончании подписок</title>
 </head>
 <body>
-    <h2>Уважаемый(ая) {{ $user->name }},</h2>
+    @php
+        $hasLowBalance = collect($subscriptions)->contains(function (array $sub): bool {
+            return in_array((string) ($sub['kind'] ?? ''), ['low_balance', 'legacy_next_plan_low_balance'], true);
+        });
+        $hasLegacySelection = collect($subscriptions)->contains(function (array $sub): bool {
+            return (string) ($sub['kind'] ?? '') === 'legacy_choose_plan';
+        });
+        $hasConfigChange = collect($subscriptions)->contains(function (array $sub): bool {
+            return !empty($sub['needs_new_config']);
+        });
+    @endphp
 
-    <p>Уведомляем вас о том, что одна или несколько ваших подписок заканчиваются в течение недели, а на вашем счету недостаточно средств для их автоматического продления:</p>
+    <h2>Здравствуйте, {{ $user->name }}.</h2>
+
+    <p>По вашим подпискам есть важные изменения на ближайшую неделю:</p>
 
     <ul style="margin: 15px 0; padding-left: 20px;">
         @foreach($subscriptions as $sub)
         <li style="margin-bottom: 8px;">
-            <strong>{{ $sub['subscription']->name }}</strong> - заканчивается через {{ $sub['days_until_expiry'] }} дней ({{ \Carbon\Carbon::parse($sub['end_date'])->format('d.m.Y H:i') }})
+            <strong>{{ $sub['subscription']->name }}</strong>
+            —
+            до {{ \Carbon\Carbon::parse($sub['end_date'])->format('d.m.Y') }}
+            ({{ $sub['days_until_expiry'] }} дн.)
+
+            @switch((string) ($sub['kind'] ?? ''))
+                @case('legacy_choose_plan')
+                    <br>
+                    Старый тариф больше не продлевается автоматически. Выберите новый тариф в личном кабинете.
+                    @break
+
+                @case('legacy_next_plan_ready')
+                    <br>
+                    Со следующего периода будет:
+                    <strong>{{ $sub['next_plan_label'] ?? 'новый тариф' }}</strong>.
+                    @if(!empty($sub['needs_new_config']))
+                        После продления понадобится новая инструкция и новый конфиг.
+                    @endif
+                    @break
+
+                @case('legacy_next_plan_low_balance')
+                    <br>
+                    Со следующего периода будет:
+                    <strong>{{ $sub['next_plan_label'] ?? 'новый тариф' }}</strong>.
+                    Цена следующего периода:
+                    <strong>{{ $sub['price_rub'] }} ₽</strong>,
+                    не хватает:
+                    <strong>{{ $sub['missing_rub'] }} ₽</strong>.
+                    @if(!empty($sub['needs_new_config']))
+                        После продления понадобится новая инструкция и новый конфиг.
+                    @endif
+                    @break
+
+                @case('low_balance')
+                    <br>
+                    Для продления потребуется
+                    <strong>{{ $sub['price_rub'] }} ₽</strong>,
+                    не хватает:
+                    <strong>{{ $sub['missing_rub'] }} ₽</strong>.
+                    @break
+            @endswitch
         </li>
         @endforeach
     </ul>
 
-    <p>На вашем счету недостаточно средств для автоматического продления подписок. Пожалуйста, пополните баланс до окончания подписок, чтобы избежать прерывания обслуживания.</p>
+    @if($hasLegacySelection)
+        <p>Без выбора нового тарифа старая VPN-подписка остановится в дату окончания.</p>
+    @endif
 
-    <p><strong>Текущий баланс:</strong> {{ $balance / 100 }} руб.</p>
+    @if($hasConfigChange)
+        <p>Если со следующего периода выбран другой режим подключения, после продления скачайте новую инструкцию и новый конфиг в личном кабинете.</p>
+    @endif
 
-    <p><a href="https://ws.litehost24.ru/my/main" style="background-color: #3490dc; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Перейти к пополнению баланса</a></p>
+    @if($hasLowBalance)
+        <p>На балансе сейчас недостаточно средств для указанных продлений. Пополните баланс заранее, чтобы избежать остановки доступа.</p>
+        <p><strong>Текущий баланс:</strong> {{ (int) ($balance / 100) }} ₽</p>
+    @endif
+
+    <p><a href="https://ws.litehost24.ru/my/main" style="background-color: #3490dc; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Открыть личный кабинет</a></p>
 
     <p>С уважением,<br>
     Команда {{ config('app.name') }}</p>
