@@ -551,7 +551,8 @@ class AutoUserSubscriptionManage
 
         try {
             $targetMode = trim((string) ($planSnapshot['vpn_access_mode'] ?? ''));
-            $server = $targetMode !== '' ? Server::resolvePurchaseServer($targetMode) : null;
+            $targetPlanCode = trim((string) ($planSnapshot['vpn_plan_code'] ?? ''));
+            $server = $targetMode !== '' ? Server::resolvePurchaseServer($targetMode, $targetPlanCode) : null;
             $user = User::query()->find((int) $userSub->user_id);
 
             if (!$server || !$user) {
@@ -616,7 +617,7 @@ class AutoUserSubscriptionManage
             $currentMode = optional(Server::query()->find($currentServerId))->getVpnAccessMode() ?? '';
         }
 
-        $targetServer = Server::resolvePurchaseServer($targetMode);
+        $targetServer = Server::resolvePurchaseServer($targetMode, trim((string) ($planSnapshot['vpn_plan_code'] ?? '')));
         if (!$targetServer) {
             return false;
         }

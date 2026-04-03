@@ -109,4 +109,39 @@ class ServerVpnAccessModeSelectionTest extends TestCase
         $this->assertNotNull($resolved);
         $this->assertSame((int) $expected->id, (int) $resolved->id);
     }
+
+    public function test_resolve_purchase_server_prefers_plan_specific_setting_when_present(): void
+    {
+        config()->set('vpn_plans.plans.restricted_mts_beta', [
+            'label' => 'Для сети МТС (бета)',
+            'short_label' => 'МТС',
+            'description' => 'Безлимит для мобильной сети МТС.',
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'base_price_cents' => 10000,
+            'traffic_limit_bytes' => null,
+            'purchase_server_setting' => 'vpn_bundle_mts_beta_server_id',
+        ]);
+
+        $mts = Server::query()->create([
+            'ip1' => '84.23.55.167',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'url2' => 'https://79.110.227.174:2053',
+        ]);
+
+        $default = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'url2' => 'https://79.110.227.174:2053',
+        ]);
+
+        ProjectSetting::setValue(Server::CURRENT_WHITE_IP_SERVER_SETTING, (string) $default->id);
+        ProjectSetting::setValue('vpn_bundle_mts_beta_server_id', (string) $mts->id);
+
+        $resolved = Server::resolvePurchaseServer(Server::VPN_ACCESS_WHITE_IP, 'restricted_mts_beta');
+
+        $this->assertNotNull($resolved);
+        $this->assertSame((int) $mts->id, (int) $resolved->id);
+    }
 }

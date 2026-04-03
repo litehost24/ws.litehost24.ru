@@ -187,4 +187,66 @@ class UserSubscriptionAddVpnTest extends TestCase
         $this->assertSame(30000, (int) $created->price);
         $this->assertSame('Laptop', (string) $created->note);
     }
+
+    public function test_add_vpn_uses_plan_specific_purchase_server_override(): void
+    {
+        config()->set('vpn_plans.plans.restricted_mts_beta', [
+            'label' => 'Для сети МТС (бета)',
+            'short_label' => 'МТС',
+            'description' => 'Безлимит для мобильной сети МТС.',
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'base_price_cents' => 10000,
+            'traffic_limit_bytes' => null,
+            'purchase_server_setting' => 'vpn_bundle_mts_beta_server_id',
+        ]);
+
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        Payment::factory()->create([
+            'user_id' => $user->id,
+            'amount' => 50000,
+        ]);
+
+        $mtsServer = Server::query()->create([
+            'ip1' => '84.23.55.167',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'url2' => 'https://79.110.227.174:2053',
+        ]);
+
+        $defaultWhite = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'url2' => 'https://79.110.227.174:2053',
+        ]);
+
+        ProjectSetting::setValue(Server::CURRENT_WHITE_IP_SERVER_SETTING, (string) $defaultWhite->id);
+        ProjectSetting::setValue('vpn_bundle_mts_beta_server_id', (string) $mtsServer->id);
+
+        Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+
+        $response = $this->actingAs($user)->postJson(route('user-subscription.add-vpn'), [
+            'note' => 'MTS Phone',
+            'vpn_plan_code' => 'restricted_mts_beta',
+        ]);
+
+        $response->assertOk();
+
+        $created = UserSubscription::query()->latest('id')->first();
+
+        $this->assertNotNull($created);
+        $this->assertSame((int) $mtsServer->id, (int) $created->server_id);
+        $this->assertSame('restricted_mts_beta', (string) $created->vpn_plan_code);
+        $this->assertSame('Для сети МТС (бета)', (string) $created->vpn_plan_name);
+        $this->assertNull($created->vpn_traffic_limit_bytes);
+        $this->assertSame(10000, (int) $created->price);
+        $this->assertSame('MTS Phone', (string) $created->note);
+    }
 }

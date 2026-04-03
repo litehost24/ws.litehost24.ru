@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\components\AutoUserSubscriptionManage;
 use App\Models\Payment;
+use App\Models\ProjectSetting;
 use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\User;
@@ -215,6 +216,69 @@ class UserSubscriptionAutoTest extends TestCase
         $this->assertSame('Стандарт', (string) $result->last()->vpn_plan_name);
         $this->assertSame(30 * 1024 * 1024 * 1024, (int) $result->last()->vpn_traffic_limit_bytes);
         $this->assertNull($result->last()->next_vpn_plan_code);
+    }
+
+    public function test_auto_rebilling_keeps_plan_specific_server_override_for_current_plan(): void
+    {
+        config()->set('vpn_plans.plans.restricted_mts_beta', [
+            'label' => 'Для сети МТС (бета)',
+            'short_label' => 'МТС',
+            'description' => 'Безлимит для мобильной сети МТС.',
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'base_price_cents' => 10000,
+            'traffic_limit_bytes' => null,
+            'purchase_server_setting' => 'vpn_bundle_mts_beta_server_id',
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+        $user = User::factory()->create();
+        Payment::factory()->create([
+            'user_id' => $user->id,
+            'amount' => 50000,
+        ]);
+
+        $mtsServer = Server::query()->create([
+            'ip1' => '84.23.55.167',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+        $defaultWhite = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        ProjectSetting::setValue(Server::CURRENT_WHITE_IP_SERVER_SETTING, (string) $defaultWhite->id);
+        ProjectSetting::setValue('vpn_bundle_mts_beta_server_id', (string) $mtsServer->id);
+
+        $expiredDate = Carbon::today()->subDay()->toDateString();
+
+        UserSubscription::factory()->create([
+            'subscription_id' => $subscription->id,
+            'user_id' => $user->id,
+            'price' => 10000,
+            'end_date' => $expiredDate,
+            'is_processed' => true,
+            'file_path' => $this->bundlePath($user->id, 'mtsplan', $mtsServer->id),
+            'server_id' => $mtsServer->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'vpn_plan_code' => 'restricted_mts_beta',
+            'vpn_plan_name' => 'Для сети МТС (бета)',
+            'vpn_traffic_limit_bytes' => null,
+        ]);
+
+        (new AutoUserSubscriptionManage())->start();
+
+        $result = UserSubscription::query()->orderBy('id')->get();
+
+        $this->assertCount(2, $result);
+        $this->assertSame((int) $mtsServer->id, (int) $result->last()->server_id);
+        $this->assertSame('restricted_mts_beta', (string) $result->last()->vpn_plan_code);
+        $this->assertSame(10000, (int) $result->last()->price);
+        $this->assertSame($result->first()->file_path, $result->last()->file_path);
     }
 
     public function test_legacy_vpn_without_selected_next_plan_does_not_renew(): void

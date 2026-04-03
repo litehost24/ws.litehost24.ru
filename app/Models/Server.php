@@ -91,18 +91,27 @@ class Server extends Model
         return self::vpnAccessModeOptions()[$mode] ?? self::vpnAccessModeOptions()[self::VPN_ACCESS_WHITE_IP];
     }
 
-    public static function resolvePurchaseServer(?string $vpnAccessMode = null): ?self
+    public static function resolvePurchaseServer(?string $vpnAccessMode = null, ?string $vpnPlanCode = null): ?self
     {
         if (!Schema::hasTable('servers')) {
             return self::query()->orderBy('id', 'desc')->first();
         }
 
-        if ($vpnAccessMode === null || trim($vpnAccessMode) === '') {
+        $planMode = trim((string) config('vpn_plans.plans.' . trim((string) $vpnPlanCode) . '.vpn_access_mode', ''));
+        $resolvedMode = $vpnAccessMode !== null && trim($vpnAccessMode) !== ''
+            ? self::normalizeVpnAccessMode($vpnAccessMode)
+            : ($planMode !== '' ? self::normalizeVpnAccessMode($planMode) : null);
+
+        $planServer = self::resolveConfiguredPlanServer($vpnPlanCode, $resolvedMode);
+        if ($planServer) {
+            return $planServer;
+        }
+
+        if ($resolvedMode === null) {
             return self::query()->orderBy('id', 'desc')->first();
         }
 
-        $mode = self::normalizeVpnAccessMode($vpnAccessMode);
-        $configured = self::resolveConfiguredBundleServer($mode);
+        $configured = self::resolveConfiguredBundleServer($resolvedMode);
         if ($configured) {
             return $configured;
         }
@@ -112,7 +121,7 @@ class Server extends Model
         }
 
         return self::query()
-            ->where('vpn_access_mode', $mode)
+            ->where('vpn_access_mode', $resolvedMode)
             ->orderBy('id', 'desc')
             ->first();
     }
@@ -138,6 +147,39 @@ class Server extends Model
         }
 
         if (Schema::hasColumn('servers', 'vpn_access_mode') && $server->getVpnAccessMode() !== self::normalizeVpnAccessMode($vpnAccessMode)) {
+            return null;
+        }
+
+        return $server;
+    }
+
+    private static function resolveConfiguredPlanServer(?string $vpnPlanCode, ?string $vpnAccessMode = null): ?self
+    {
+        $planCode = trim((string) $vpnPlanCode);
+        if ($planCode === '') {
+            return null;
+        }
+
+        $settingKey = trim((string) config('vpn_plans.plans.' . $planCode . '.purchase_server_setting', ''));
+        if ($settingKey === '') {
+            return null;
+        }
+
+        $serverId = ProjectSetting::getInt($settingKey, 0);
+        if ($serverId <= 0) {
+            return null;
+        }
+
+        $server = self::query()->find($serverId);
+        if (!$server) {
+            return null;
+        }
+
+        if (
+            $vpnAccessMode !== null
+            && Schema::hasColumn('servers', 'vpn_access_mode')
+            && $server->getVpnAccessMode() !== self::normalizeVpnAccessMode($vpnAccessMode)
+        ) {
             return null;
         }
 

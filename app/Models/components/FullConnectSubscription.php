@@ -47,7 +47,8 @@ class FullConnectSubscription
         $resolvedMode = $this->vpnAccessMode !== null && trim($this->vpnAccessMode) !== ''
             ? Server::normalizeVpnAccessMode($this->vpnAccessMode)
             : ($planSnapshot['vpn_access_mode'] ?? null);
-        $resolvedServer = $resolvedMode ? Server::resolvePurchaseServer($resolvedMode) : null;
+        $planCode = trim((string) ($planSnapshot['vpn_plan_code'] ?? ''));
+        $resolvedServer = $resolvedMode ? Server::resolvePurchaseServer($resolvedMode, $planCode) : null;
 
         // Tests should not depend on external server services.
         if (app()->environment('testing')) {
@@ -100,7 +101,7 @@ class FullConnectSubscription
             return;
         }
 
-        $server = $resolvedServer ?: Server::resolvePurchaseServer($this->vpnAccessMode);
+        $server = $resolvedServer ?: Server::resolvePurchaseServer($this->vpnAccessMode, $planCode);
         if (!$server) {
             if ($this->vpnAccessMode !== null && trim($this->vpnAccessMode) !== '') {
                 throw new Exception('Server not configured for mode: ' . $this->vpnAccessMode);
