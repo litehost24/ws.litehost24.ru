@@ -110,11 +110,13 @@
                                                 $planCode = (string) ($plan['code'] ?? '');
                                                 $planLimitGb = $plan['traffic_limit_gb'] ?? null;
                                                 $planMode = (string) ($plan['vpn_access_mode'] ?? '');
-                                                $planTrafficText = $planMode === \App\Models\Server::VPN_ACCESS_REGULAR
-                                                    ? 'Безлимит по гигабайтам для обычного подключения'
-                                                    : ($planLimitGb !== null
-                                                        ? ($planLimitGb . ' ГБ в режиме при ограничениях')
-                                                        : 'Без пакета трафика режима при ограничениях');
+                                                $planTrafficText = !empty($plan['traffic_label'])
+                                                    ? (string) $plan['traffic_label']
+                                                    : ($planMode === \App\Models\Server::VPN_ACCESS_REGULAR
+                                                        ? 'Безлимит по гигабайтам для обычного подключения'
+                                                        : ($planLimitGb !== null
+                                                            ? ($planLimitGb . ' ГБ в режиме при ограничениях')
+                                                            : 'Без пакета трафика режима при ограничениях'));
                                             @endphp
                                             <label class="vpn-plan-option">
                                                 <input
@@ -147,7 +149,9 @@
                                                         <span class="vpn-plan-option__price">{{ (int) ($plan['final_price_rub'] ?? 0) }} ₽/мес</span>
                                                     </span>
                                                     <span class="vpn-plan-option__body">
-                                                        @if($planMode === \App\Models\Server::VPN_ACCESS_REGULAR)
+                                                        @if(!empty($plan['traffic_label']))
+                                                            <span class="vpn-plan-option__traffic {{ $planMode === \App\Models\Server::VPN_ACCESS_REGULAR ? 'vpn-plan-option__traffic--unlimited' : '' }}">{{ $plan['traffic_label'] }}</span>
+                                                        @elseif($planMode === \App\Models\Server::VPN_ACCESS_REGULAR)
                                                             <span class="vpn-plan-option__traffic vpn-plan-option__traffic--unlimited">Безлимит по гигабайтам</span>
                                                         @elseif($planLimitGb !== null)
                                                             <span class="vpn-plan-option__traffic">{{ $planLimitGb }} ГБ в режиме при ограничениях</span>

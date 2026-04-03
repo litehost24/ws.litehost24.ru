@@ -87,6 +87,9 @@ class VpnPlanCatalog
             'label' => (string) ($plan['label'] ?? $planCode),
             'short_label' => (string) ($plan['short_label'] ?? ($plan['label'] ?? $planCode)),
             'description' => (string) ($plan['description'] ?? ''),
+            'traffic_label' => trim((string) ($plan['traffic_label'] ?? '')) !== ''
+                ? (string) $plan['traffic_label']
+                : null,
             'vpn_access_mode' => $mode,
             'base_price_cents' => $basePriceCents,
             'traffic_limit_bytes' => $trafficLimitBytes,

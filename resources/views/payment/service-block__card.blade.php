@@ -279,9 +279,11 @@
                                 <option value="" disabled {{ $nextVpnPlanCode === '' ? 'selected' : '' }}>Выберите тариф</option>
                                 @foreach ($legacyNextPlanOptions as $plan)
                                     @php
-                                        $planSuffix = ($plan['traffic_limit_gb'] ?? null) !== null
-                                            ? ($plan['traffic_limit_gb'] . ' ГБ')
-                                            : 'безлимит';
+                                        $planSuffix = !empty($plan['traffic_label'])
+                                            ? (string) $plan['traffic_label']
+                                            : ((($plan['traffic_limit_gb'] ?? null) !== null)
+                                                ? ($plan['traffic_limit_gb'] . ' ГБ')
+                                                : 'безлимит');
                                         $planIcon = (($plan['vpn_access_mode'] ?? null) === \App\Models\Server::VPN_ACCESS_REGULAR)
                                             ? '🏠'
                                             : '📶';

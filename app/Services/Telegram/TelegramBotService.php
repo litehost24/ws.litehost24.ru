@@ -673,17 +673,21 @@ class TelegramBotService
             $buttonText = sprintf('%s %s — %d ₽/мес', $icon, $shortLabel, $finalPriceRub);
 
             $trafficLimitGb = $plan['traffic_limit_gb'] ?? null;
-            $suffix = $trafficLimitGb === null
-                ? 'безлимит'
-                : ((int) $trafficLimitGb . ' ГБ');
+            $suffix = !empty($plan['traffic_label'])
+                ? (string) $plan['traffic_label']
+                : ($trafficLimitGb === null
+                    ? 'безлимит'
+                    : ((int) $trafficLimitGb . ' ГБ'));
 
             $options[] = [
                 'code' => $code,
                 'button_text' => $buttonText,
                 'label_line' => $buttonText . ' · ' . $suffix,
-                'description_line' => $mode === \App\Models\Server::VPN_ACCESS_REGULAR
-                    ? 'Для Wi‑Fi и проводного интернета, безлимит по гигабайтам.'
-                    : sprintf('%s в режиме при ограничениях.', $suffix),
+                'description_line' => trim((string) ($plan['description'] ?? '')) !== ''
+                    ? (string) $plan['description']
+                    : ($mode === \App\Models\Server::VPN_ACCESS_REGULAR
+                        ? 'Для Wi‑Fi и проводного интернета, безлимит по гигабайтам.'
+                        : sprintf('%s в режиме при ограничениях.', $suffix)),
             ];
         }
 

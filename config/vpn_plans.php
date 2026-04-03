@@ -14,6 +14,16 @@ return [
             'base_price_cents' => 10000,
             'traffic_limit_bytes' => null,
         ],
+        'restricted_mts_beta' => [
+            'label' => 'Для сети МТС (бета)',
+            'short_label' => 'МТС',
+            'description' => 'Только для сети МТС. Тестовый тариф, доступность не гарантируется.',
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'base_price_cents' => 10000,
+            'traffic_limit_bytes' => null,
+            'traffic_label' => 'Безлимит только для сети МТС',
+            'purchase_server_setting' => 'vpn_bundle_mts_beta_server_id',
+        ],
         'restricted_economy' => [
             'label' => 'Эконом',
             'short_label' => 'Эконом',
