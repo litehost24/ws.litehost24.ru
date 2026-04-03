@@ -670,7 +670,7 @@ class TelegramBotService
 
             $options[] = [
                 'code' => $code,
-                'button_text' => $buttonText,
+                'button_text' => $buttonText . ' · ' . $suffix,
                 'label_line' => $buttonText . ' · ' . $suffix,
             ];
         }

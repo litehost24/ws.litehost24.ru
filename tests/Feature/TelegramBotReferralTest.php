@@ -399,10 +399,10 @@ class TelegramBotReferralTest extends TestCase
 
         $keyboard = collect($menuResponse->json('reply_markup.keyboard') ?? []);
         $buttonTexts = $keyboard->flatten(1)->pluck('text')->all();
-        $this->assertContains('🏠 Обычное — 100 ₽/мес', $buttonTexts);
-        $this->assertContains('📶 Эконом — 100 ₽/мес', $buttonTexts);
-        $this->assertContains('📶 Стандарт — 200 ₽/мес', $buttonTexts);
-        $this->assertContains('📶 Премиум — 300 ₽/мес', $buttonTexts);
+        $this->assertContains('🏠 Обычное — 100 ₽/мес · безлимит', $buttonTexts);
+        $this->assertContains('📶 Эконом — 100 ₽/мес · 10 ГБ', $buttonTexts);
+        $this->assertContains('📶 Стандарт — 200 ₽/мес · 30 ГБ', $buttonTexts);
+        $this->assertContains('📶 Премиум — 300 ₽/мес · 50 ГБ', $buttonTexts);
         $this->assertContains('Назад', $buttonTexts);
 
         // Pick a concrete plan.
@@ -412,7 +412,7 @@ class TelegramBotReferralTest extends TestCase
                 'message_id' => 52,
                 'from' => ['id' => 777, 'username' => 'u7', 'first_name' => 'U7'],
                 'chat' => ['id' => 777, 'type' => 'private'],
-                'text' => '📶 Стандарт — 200 ₽/мес',
+                'text' => '📶 Стандарт — 200 ₽/мес · 30 ГБ',
             ],
         ]);
 
@@ -519,7 +519,7 @@ class TelegramBotReferralTest extends TestCase
                 'message_id' => 62,
                 'from' => ['id' => 888, 'username' => 'u8', 'first_name' => 'U8'],
                 'chat' => ['id' => 888, 'type' => 'private'],
-                'text' => '📶 Эконом — 100 ₽/мес',
+                'text' => '📶 Эконом — 100 ₽/мес · 10 ГБ',
             ],
         ]);
         $this->postTelegram([
