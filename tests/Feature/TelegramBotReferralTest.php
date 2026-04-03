@@ -395,11 +395,15 @@ class TelegramBotReferralTest extends TestCase
 
         $menuResponse->assertJsonPath('method', 'sendMessage');
         $menuText = (string) $menuResponse->json('text');
-        $this->assertStringContainsString('Выберите тариф VPN:', $menuText);
-        $this->assertStringContainsString('🏠 Обычное — 100 ₽/мес · безлимит', $menuText);
-        $this->assertStringContainsString('📶 Эконом — 100 ₽/мес · 10 ГБ', $menuText);
-        $this->assertStringContainsString('📶 Стандарт — 200 ₽/мес · 30 ГБ', $menuText);
-        $this->assertStringContainsString('📶 Премиум — 300 ₽/мес · 50 ГБ', $menuText);
+        $this->assertSame('Выберите тариф VPN:', $menuText);
+
+        $keyboard = collect($menuResponse->json('reply_markup.keyboard') ?? []);
+        $buttonTexts = $keyboard->flatten(1)->pluck('text')->all();
+        $this->assertContains('🏠 Обычное — 100 ₽/мес', $buttonTexts);
+        $this->assertContains('📶 Эконом — 100 ₽/мес', $buttonTexts);
+        $this->assertContains('📶 Стандарт — 200 ₽/мес', $buttonTexts);
+        $this->assertContains('📶 Премиум — 300 ₽/мес', $buttonTexts);
+        $this->assertContains('Назад', $buttonTexts);
 
         // Pick a concrete plan.
         $this->postTelegram([

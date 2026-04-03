@@ -616,12 +616,7 @@ class TelegramBotService
         ];
         $keyboard['keyboard'][] = [['text' => 'Назад']];
 
-        $lines = ['Выберите тариф VPN:'];
-        foreach ($options as $option) {
-            $lines[] = (string) ($option['label_line'] ?? $option['button_text']);
-        }
-
-        $this->api->sendMessage($chatId, implode("\n", $lines), [
+        $this->api->sendMessage($chatId, 'Выберите тариф VPN:', [
             'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
         ]);
     }
