@@ -14,6 +14,33 @@ use Illuminate\Support\Facades\Auth;
 
 class TelegramSubscriptionService
 {
+    public function getVpnPurchaseOptions(User $user): array
+    {
+        $prev = Auth::user();
+        Auth::setUser($user);
+        try {
+            $vpnSub = Subscription::nextAvailableVpnForUser((int) $user->id);
+            if (!$vpnSub) {
+                return [];
+            }
+
+            $catalog = app(VpnPlanCatalog::class);
+            $referrer = $user->referrer;
+
+            return $catalog->purchaseOptions($vpnSub, $referrer, $user);
+        } finally {
+            if ($prev) {
+                Auth::setUser($prev);
+            } else {
+                try {
+                    Auth::logout();
+                } catch (\Throwable) {
+                    // ignore
+                }
+            }
+        }
+    }
+
     public function getNextVpnPriceRub(User $user): ?int
     {
         $prev = Auth::user();
@@ -48,7 +75,7 @@ class TelegramSubscriptionService
     /**
      * @return array{ok: bool, message?: string, balance_rub?: int, end_date?: string, file_url?: string, file_path?: string, user_subscription_id?: int}
      */
-    public function buyVpn(User $user, ?string $note = null): array
+    public function buyVpn(User $user, ?string $note = null, ?string $planCode = null): array
     {
         if (!in_array($user->role, ['user', 'admin', 'partner'], true)) {
             return ['ok' => false, 'message' => 'Покупка доступна только по реферальной ссылке клиента.'];
@@ -63,7 +90,7 @@ class TelegramSubscriptionService
             }
 
             $catalog = app(VpnPlanCatalog::class);
-            $planCode = $catalog->defaultPurchasePlanCode();
+            $planCode = $catalog->normalizePlanCode($planCode);
             $pricing = app(ReferralPricingService::class);
             $referrer = $user->referrer;
             $basePrice = $catalog->resolveBasePriceCents($sub, $planCode);

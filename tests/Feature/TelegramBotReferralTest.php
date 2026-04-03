@@ -378,12 +378,12 @@ class TelegramBotReferralTest extends TestCase
         // Add balance.
         Payment::create([
             'user_id' => $user->id,
-            'amount' => 10000,
+            'amount' => 50000,
             'order_name' => 'test',
         ]);
 
         // Enter buy menu.
-        $this->postTelegram([
+        $menuResponse = $this->postJson('/api/telegram/webhook/secret', [
             'update_id' => 51,
             'message' => [
                 'message_id' => 51,
@@ -391,16 +391,24 @@ class TelegramBotReferralTest extends TestCase
                 'chat' => ['id' => 777, 'type' => 'private'],
                 'text' => 'Купить подписку',
             ],
-        ]);
+        ])->assertOk();
 
-        // Pick VPN.
+        $menuResponse->assertJsonPath('method', 'sendMessage');
+        $menuText = (string) $menuResponse->json('text');
+        $this->assertStringContainsString('Выберите тариф VPN:', $menuText);
+        $this->assertStringContainsString('🏠 Обычное — 100 ₽/мес · безлимит', $menuText);
+        $this->assertStringContainsString('📶 Эконом — 100 ₽/мес · 10 ГБ', $menuText);
+        $this->assertStringContainsString('📶 Стандарт — 200 ₽/мес · 30 ГБ', $menuText);
+        $this->assertStringContainsString('📶 Премиум — 300 ₽/мес · 50 ГБ', $menuText);
+
+        // Pick a concrete plan.
         $this->postTelegram([
             'update_id' => 52,
             'message' => [
                 'message_id' => 52,
                 'from' => ['id' => 777, 'username' => 'u7', 'first_name' => 'U7'],
                 'chat' => ['id' => 777, 'type' => 'private'],
-                'text' => 'VPN',
+                'text' => '📶 Стандарт — 200 ₽/мес',
             ],
         ]);
 
@@ -417,12 +425,15 @@ class TelegramBotReferralTest extends TestCase
 
         $this->assertDatabaseHas('user_subscriptions', [
             'user_id' => $user->id,
+            'vpn_plan_code' => 'restricted_standard',
+            'price' => 20000,
         ]);
         $userSub = UserSubscription::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
 
         $response->assertJsonPath('method', 'sendMessage');
         $text = (string) $response->json('text');
         $this->assertStringContainsString('VPN подключен.', $text);
+        $this->assertStringContainsString('Тариф: 📶 Стандарт — 200 ₽/мес · 30 ГБ', $text);
         $this->assertStringContainsString('Оплачен до:', $text);
         $this->assertStringContainsString('Баланс:', $text);
         $this->assertStringContainsString('Инструкции по подключению:', $text);
@@ -484,7 +495,7 @@ class TelegramBotReferralTest extends TestCase
 
         Payment::create([
             'user_id' => $user->id,
-            'amount' => 5000,
+            'amount' => 50000,
             'order_name' => 'test',
         ]);
 
@@ -504,7 +515,7 @@ class TelegramBotReferralTest extends TestCase
                 'message_id' => 62,
                 'from' => ['id' => 888, 'username' => 'u8', 'first_name' => 'U8'],
                 'chat' => ['id' => 888, 'type' => 'private'],
-                'text' => 'VPN',
+                'text' => '📶 Эконом — 100 ₽/мес',
             ],
         ]);
         $this->postTelegram([

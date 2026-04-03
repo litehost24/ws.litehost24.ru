@@ -366,14 +366,19 @@ class TelegramBotService
                 return;
             }
 
-            if ($choice === 'vpn' || $choice === 'подписка') {
-                $this->identitySetState($identity, ['mode' => 'buy_vpn_note'], 600);
-                $this->sendVpnNotePrompt($identity->telegram_chat_id);
-                $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
-                return;
+            foreach ($this->vpnPlanMenuOptions($user) as $option) {
+                if ($choice === mb_strtolower((string) ($option['button_text'] ?? ''))) {
+                    $this->identitySetState($identity, [
+                        'mode' => 'buy_vpn_note',
+                        'vpn_plan_code' => (string) ($option['code'] ?? ''),
+                    ], 600);
+                    $this->sendVpnNotePrompt($identity->telegram_chat_id, (string) ($option['button_text'] ?? ''));
+                    $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+                    return;
+                }
             }
 
-            $this->api->sendMessage($identity->telegram_chat_id, "Выберите подписку кнопкой.");
+            $this->api->sendMessage($identity->telegram_chat_id, "Выберите тариф кнопкой.");
             $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
             return;
         }
@@ -407,16 +412,21 @@ class TelegramBotService
 
             $this->identityClearState($identity);
 
-            $result = $this->subs->buyVpn($user, $note);
+            $planCode = trim((string) ($state['vpn_plan_code'] ?? ''));
+            $result = $this->subs->buyVpn($user, $note, $planCode !== '' ? $planCode : null);
             if (!$result['ok']) {
                 $this->api->sendMessage($identity->telegram_chat_id, (string) $result['message']);
                 $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
                 return;
             }
 
+            $purchasedPlan = $this->findVpnPlanMenuOption($user, $planCode);
             $lines = [
                 "VPN подключен.",
             ];
+            if ($purchasedPlan !== null) {
+                $lines[] = "Тариф: " . (string) ($purchasedPlan['label_line'] ?? $purchasedPlan['button_text'] ?? $planCode);
+            }
             if (!empty($result['end_date'])) {
                 $lines[] = "Оплачен до: " . $result['end_date'];
             }
@@ -594,24 +604,29 @@ class TelegramBotService
 
     private function sendBuyMenu(int $chatId, User $user): void
     {
-        $nextVpnPriceRub = $this->subs->getNextVpnPriceRub($user);
+        $options = $this->vpnPlanMenuOptions($user);
 
         $keyboard = [
-            'keyboard' => [
-                [['text' => 'Подписка']],
-                [['text' => 'Назад']],
-            ],
+            'keyboard' => array_values(array_map(
+                fn (array $option): array => [['text' => (string) $option['button_text']]],
+                $options
+            )),
             'resize_keyboard' => true,
             'one_time_keyboard' => true,
         ];
+        $keyboard['keyboard'][] = [['text' => 'Назад']];
 
-        $suffix = $nextVpnPriceRub !== null ? " · {$nextVpnPriceRub} ₽/мес" : '';
-        $this->api->sendMessage($chatId, "Выберите подписку для покупки:\nПодписка{$suffix}", [
+        $lines = ['Выберите тариф VPN:'];
+        foreach ($options as $option) {
+            $lines[] = (string) ($option['label_line'] ?? $option['button_text']);
+        }
+
+        $this->api->sendMessage($chatId, implode("\n", $lines), [
             'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
         ]);
     }
 
-    private function sendVpnNotePrompt(int $chatId): void
+    private function sendVpnNotePrompt(int $chatId, ?string $selectedPlan = null): void
     {
         $keyboard = [
             'keyboard' => [
@@ -621,12 +636,67 @@ class TelegramBotService
             'one_time_keyboard' => true,
         ];
 
-        $this->api->sendMessage($chatId, implode("\n", [
+        $lines = [];
+        if ($selectedPlan !== null && trim($selectedPlan) !== '') {
+            $lines[] = 'Выбран тариф: ' . trim($selectedPlan);
+            $lines[] = '';
+        }
+
+        $lines = array_merge($lines, [
             "Введите пометку (например: ПК, Ноутбук, Телефон).",
             "Или нажмите «Без пометки».",
-        ]), [
+        ]);
+
+        $this->api->sendMessage($chatId, implode("\n", $lines), [
             'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
         ]);
+    }
+
+    private function vpnPlanMenuOptions(User $user): array
+    {
+        $options = [];
+
+        foreach ($this->subs->getVpnPurchaseOptions($user) as $plan) {
+            $code = trim((string) ($plan['code'] ?? ''));
+            if ($code === '') {
+                continue;
+            }
+
+            $mode = (string) ($plan['vpn_access_mode'] ?? '');
+            $icon = $mode === \App\Models\Server::VPN_ACCESS_REGULAR ? '🏠' : '📶';
+            $shortLabel = trim((string) ($plan['short_label'] ?? $plan['label'] ?? $code));
+            $finalPriceRub = (int) ($plan['final_price_rub'] ?? 0);
+            $buttonText = sprintf('%s %s — %d ₽/мес', $icon, $shortLabel, $finalPriceRub);
+
+            $trafficLimitGb = $plan['traffic_limit_gb'] ?? null;
+            $suffix = $trafficLimitGb === null
+                ? 'безлимит'
+                : ((int) $trafficLimitGb . ' ГБ');
+
+            $options[] = [
+                'code' => $code,
+                'button_text' => $buttonText,
+                'label_line' => $buttonText . ' · ' . $suffix,
+            ];
+        }
+
+        return $options;
+    }
+
+    private function findVpnPlanMenuOption(User $user, ?string $planCode): ?array
+    {
+        $planCode = trim((string) $planCode);
+        if ($planCode === '') {
+            return null;
+        }
+
+        foreach ($this->vpnPlanMenuOptions($user) as $option) {
+            if ((string) ($option['code'] ?? '') === $planCode) {
+                return $option;
+            }
+        }
+
+        return null;
     }
 
     private function sendReferralLinks(int $chatId, User $user): void
