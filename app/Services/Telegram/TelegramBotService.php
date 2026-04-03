@@ -616,7 +616,16 @@ class TelegramBotService
         ];
         $keyboard['keyboard'][] = [['text' => 'Назад']];
 
-        $this->api->sendMessage($chatId, 'Выберите тариф VPN:', [
+        $lines = ['Выберите тариф VPN:', ''];
+        foreach ($options as $index => $option) {
+            $lines[] = (string) ($option['button_text'] ?? '');
+            $lines[] = (string) ($option['description_line'] ?? '');
+            if ($index !== array_key_last($options)) {
+                $lines[] = '';
+            }
+        }
+
+        $this->api->sendMessage($chatId, implode("\n", array_filter($lines, fn ($line) => $line !== '')), [
             'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
         ]);
     }
@@ -670,8 +679,11 @@ class TelegramBotService
 
             $options[] = [
                 'code' => $code,
-                'button_text' => $buttonText . ' · ' . $suffix,
+                'button_text' => $buttonText,
                 'label_line' => $buttonText . ' · ' . $suffix,
+                'description_line' => $mode === \App\Models\Server::VPN_ACCESS_REGULAR
+                    ? 'Для Wi‑Fi и проводного интернета, безлимит по гигабайтам.'
+                    : sprintf('%s в режиме при ограничениях.', $suffix),
             ];
         }
 
