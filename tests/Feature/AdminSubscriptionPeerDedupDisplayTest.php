@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\UserSubscription;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class AdminSubscriptionPeerDedupDisplayTest extends TestCase
@@ -144,5 +145,80 @@ class AdminSubscriptionPeerDedupDisplayTest extends TestCase
         $this->assertCount(2, $rows);
         $this->assertTrue($rows->contains(fn ($row) => (int) $row->id === (int) $current->id));
         $this->assertTrue($rows->contains(fn ($row) => (int) $row->id === (int) $inactiveSlot->id));
+    }
+
+    public function test_admin_subscriptions_index_marks_inactive_slot_with_same_live_peer_as_historical(): void
+    {
+        $admin = User::factory()->create([
+            'role' => 'admin',
+            'email_verified_at' => now(),
+        ]);
+
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $server = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'url1' => 'https://node1.example',
+            'username1' => 'u1',
+            'password1' => 'p1',
+        ]);
+
+        $oldSubscription = Subscription::factory()->create(['name' => 'VPN']);
+        $currentSubscription = Subscription::factory()->create(['name' => 'VPN']);
+
+        $inactiveSlot = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $oldSubscription->id,
+            'action' => 'activate',
+            'price' => 5000,
+            'is_processed' => true,
+            'is_rebilling' => false,
+            'end_date' => Carbon::today()->subDay()->toDateString(),
+            'file_path' => 'files/' . $user->id . '_52_' . $server->id . '_01_04_2026_12_00/' . $user->id . '_52_' . $server->id . '_01_04_2026_12_00.zip',
+            'server_id' => $server->id,
+        ]);
+
+        $activeSlot = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $currentSubscription->id,
+            'action' => 'activate',
+            'price' => 5000,
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(10)->toDateString(),
+            'file_path' => 'files/' . $user->id . '_52_' . $server->id . '_02_04_2026_12_00/' . $user->id . '_52_' . $server->id . '_02_04_2026_12_00.zip',
+            'server_id' => $server->id,
+        ]);
+
+        DB::table('vpn_peer_server_states')->insert([
+            'server_id' => $server->id,
+            'peer_name' => '52',
+            'server_status' => 'enabled',
+            'status_fetched_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.subscriptions.index'));
+
+        $response->assertOk();
+
+        $rows = $response->viewData('userSubscriptions');
+        $inactiveRow = $rows->firstWhere('id', $inactiveSlot->id);
+        $activeRow = $rows->firstWhere('id', $activeSlot->id);
+
+        $this->assertNotNull($inactiveRow);
+        $this->assertNotNull($activeRow);
+        $this->assertSame('shadowed', $inactiveRow->server_status);
+        $this->assertSame('unknown', $inactiveRow->effective_status);
+        $this->assertFalse((bool) $inactiveRow->has_server_status_conflict);
+        $this->assertTrue((bool) $inactiveRow->is_shadowed_by_active_peer);
+        $this->assertSame('enabled', $activeRow->server_status);
+        $this->assertFalse((bool) $activeRow->has_server_status_conflict);
     }
 }

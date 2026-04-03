@@ -168,6 +168,9 @@
                                 if ($status === 'stopped') {
                                     return '<span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-800 font-bold" title="Остановлена">×</span>';
                                 }
+                                if ($status === 'shadowed') {
+                                    return '<span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-500 font-bold" title="Историческая строка">—</span>';
+                                }
                                 return '<span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-700 font-bold" title="Неизвестно">?</span>';
                             };
                             $modeBadgeClass = function ($mode) {
@@ -628,6 +631,8 @@
                                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Включена</span>
                                             @elseif($first->server_status === 'disabled')
                                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Отключена</span>
+                                            @elseif($first->server_status === 'shadowed')
+                                                <span class="text-sm text-gray-400">—</span>
                                             @elseif($first->server_status === 'missing')
                                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Не найдена</span>
                                             @else
@@ -786,6 +791,8 @@
                                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Включена</span>
                                                 @elseif($sub->server_status === 'disabled')
                                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Отключена</span>
+                                                @elseif($sub->server_status === 'shadowed')
+                                                    <span class="text-sm text-gray-400">—</span>
                                                 @elseif($sub->server_status === 'missing')
                                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Не найдена</span>
                                                 @else

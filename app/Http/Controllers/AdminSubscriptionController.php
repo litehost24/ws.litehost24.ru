@@ -169,6 +169,20 @@ class AdminSubscriptionController extends Controller
         }
 
         $latestUserSubscriptions = $this->collapseDuplicatePeerRows($latestUserSubscriptions);
+        $activeDisplayPeerKeys = $latestUserSubscriptions
+            ->filter(fn (UserSubscription $subscription) => (bool) ($subscription->is_active ?? false))
+            ->map(function (UserSubscription $subscription) {
+                $userId = (int) ($subscription->user_id ?? 0);
+                $peerName = trim((string) ($subscription->peer_name ?? ''));
+                if ($userId <= 0 || $peerName === '') {
+                    return null;
+                }
+
+                return $userId . ':' . $peerName;
+            })
+            ->filter()
+            ->unique()
+            ->flip();
 
         $historyServerIdsByPairPeer = collect([]);
         $pairKeys = $latestUserSubscriptions
@@ -262,6 +276,10 @@ class AdminSubscriptionController extends Controller
         foreach ($latestUserSubscriptions as $userSub) {
             $peerName = (string) ($userSub->peer_name ?? '');
             $resolvedServerId = (int) ($userSub->resolved_server_id ?? 0);
+            $displayPeerKey = (int) ($userSub->user_id ?? 0) . ':' . $peerName;
+            $isShadowedByActivePeer = !(bool) $userSub->is_active
+                && $peerName !== ''
+                && $activeDisplayPeerKeys->has($displayPeerKey);
             $state = ($peerName !== '' && $resolvedServerId > 0)
                 ? $serverStateByServerPeer->get($resolvedServerId . ':' . $peerName)
                 : null;
@@ -275,10 +293,19 @@ class AdminSubscriptionController extends Controller
                 $serverStatus = ($peerName !== '' && !$hasSwitchedServerHistory) ? 'missing' : 'unknown';
             }
 
+            if ($isShadowedByActivePeer) {
+                $serverStatus = 'shadowed';
+            }
+
+            $userSub->is_shadowed_by_active_peer = $isShadowedByActivePeer;
             $userSub->server_status = $serverStatus;
-            $userSub->effective_status = $serverStatus === 'enabled' ? 'working' : ($serverStatus === 'unknown' ? 'unknown' : 'stopped');
-            $userSub->has_server_status_conflict = ((bool) $userSub->is_active && $serverStatus !== 'enabled')
-                || (!(bool) $userSub->is_active && $serverStatus === 'enabled');
+            $userSub->effective_status = $serverStatus === 'enabled'
+                ? 'working'
+                : ($serverStatus === 'unknown' || $serverStatus === 'shadowed' ? 'unknown' : 'stopped');
+            $userSub->has_server_status_conflict = !$isShadowedByActivePeer && (
+                ((bool) $userSub->is_active && $serverStatus !== 'enabled')
+                || (!(bool) $userSub->is_active && $serverStatus === 'enabled')
+            );
             $userSub->endpoint_ip = $state?->endpoint_ip ?: null;
             $userSub->endpoint_seen_at = $state?->status_fetched_at ?: null;
         }
