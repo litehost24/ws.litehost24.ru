@@ -64,7 +64,7 @@ class UserSubscriptionManualConnectTest extends TestCase
         $user = User::factory()->create(['role' => 'user']);
         Payment::factory()->create([
             'user_id' => $user->id,
-            'amount' => 15000,
+            'amount' => 60000,
         ]);
 
         $subscriptionA = Subscription::factory()->create([
@@ -79,24 +79,30 @@ class UserSubscriptionManualConnectTest extends TestCase
         $awaitingA = UserSubscription::factory()->create([
             'user_id' => $user->id,
             'subscription_id' => $subscriptionA->id,
-            'price' => 5000,
+            'price' => 20000,
             'action' => 'activate',
             'is_processed' => false,
             'is_rebilling' => true,
             'end_date' => UserSubscription::AWAIT_PAYMENT_DATE,
             'file_path' => 'files/device_a_1_1.zip',
             'connection_config' => 'vless://device-a#device-a',
+            'vpn_plan_code' => 'restricted_standard',
+            'vpn_plan_name' => 'Стандарт',
+            'vpn_traffic_limit_bytes' => 30 * 1024 * 1024 * 1024,
         ]);
         UserSubscription::factory()->create([
             'user_id' => $user->id,
             'subscription_id' => $subscriptionB->id,
-            'price' => 5000,
+            'price' => 20000,
             'action' => 'activate',
             'is_processed' => false,
             'is_rebilling' => true,
             'end_date' => UserSubscription::AWAIT_PAYMENT_DATE,
             'file_path' => 'files/device_b_1_2.zip',
             'connection_config' => 'vless://device-b#device-b',
+            'vpn_plan_code' => 'restricted_standard',
+            'vpn_plan_name' => 'Стандарт',
+            'vpn_traffic_limit_bytes' => 30 * 1024 * 1024 * 1024,
         ]);
 
         $response = $this->actingAs($user)->getJson('/user-subscription/connect?id=' . $subscriptionA->id . '&user_subscription_id=' . $awaitingA->id);
@@ -120,5 +126,35 @@ class UserSubscriptionManualConnectTest extends TestCase
             'is_rebilling' => true,
             'end_date' => Carbon::today()->addMonthNoOverflow()->toDateString(),
         ]);
+    }
+
+    public function test_legacy_vpn_cannot_be_reactivated_via_old_connect_route(): void
+    {
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+        $user = User::factory()->create(['role' => 'user']);
+        Payment::factory()->create([
+            'user_id' => $user->id,
+            'amount' => 50000,
+        ]);
+
+        $legacy = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 5000,
+            'is_processed' => false,
+            'is_rebilling' => false,
+            'vpn_plan_code' => null,
+            'next_vpn_plan_code' => null,
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/user-subscription/connect?id=' . $subscription->id . '&user_subscription_id=' . $legacy->id);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'message' => 'Старый тариф больше не продлевается. Выберите новый тариф со следующего периода.',
+            ]);
     }
 }

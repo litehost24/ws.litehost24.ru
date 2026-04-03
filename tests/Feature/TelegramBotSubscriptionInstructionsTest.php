@@ -83,6 +83,9 @@ CONF);
             'end_date' => Carbon::today()->addDays(10)->toDateString(),
             'file_path' => $relativePath,
             'connection_config' => 'vless://test#device-main',
+            'vpn_plan_code' => 'restricted_standard',
+            'vpn_plan_name' => 'Стандарт',
+            'vpn_traffic_limit_bytes' => 30 * 1024 * 1024 * 1024,
         ]);
 
         $this->postTelegram([
@@ -161,6 +164,72 @@ CONF);
 
         Http::assertNotSent(function (Request $request) {
             return str_contains($request->url(), '/sendPhoto');
+        });
+    }
+
+    public function test_bot_shows_legacy_next_plan_state_without_old_auto_renew_text(): void
+    {
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true, 'result' => []], 200),
+        ]);
+
+        config()->set('support.telegram.webhook_secret', 'secret');
+        config()->set('support.telegram.bot_token', 'token');
+
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email' => 'telegram-legacy@example.com',
+            'email_verified_at' => now(),
+        ]);
+
+        TelegramIdentity::create([
+            'user_id' => $user->id,
+            'telegram_user_id' => 902,
+            'telegram_chat_id' => 902,
+            'username' => 'tg902',
+            'first_name' => 'TG2',
+            'last_update_id' => 0,
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+
+        UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 5000,
+            'action' => 'create',
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(10)->toDateString(),
+            'file_path' => 'files/test-telegram-bot-legacy/subscription.zip',
+            'vpn_plan_code' => null,
+            'next_vpn_plan_code' => 'regular_basic',
+        ]);
+
+        $this->postTelegram([
+            'update_id' => 102,
+            'message' => [
+                'message_id' => 102,
+                'from' => ['id' => 902, 'username' => 'tg902', 'first_name' => 'TG2'],
+                'chat' => ['id' => 902, 'type' => 'private'],
+                'text' => 'Мои подписки',
+            ],
+        ]);
+
+        Http::assertSent(function (Request $request) {
+            if (!str_contains($request->url(), '/sendMessage')) {
+                return false;
+            }
+
+            $text = (string) (($request->data())['text'] ?? '');
+
+            return str_contains($text, 'Старый тариф: действует до')
+                && str_contains($text, 'Следующий тариф: Обычное подключение')
+                && str_contains($text, 'После продления понадобится новая инструкция и новый конфиг.')
+                && !str_contains($text, 'Автопродление: да');
         });
     }
 }

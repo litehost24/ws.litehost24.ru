@@ -62,6 +62,50 @@ class UserSubscriptionScheduleNextPlanTest extends TestCase
         ]);
     }
 
+    public function test_scheduling_regular_plan_mentions_new_config_requirement(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+
+        $server = Server::query()->create([
+            'ip1' => '84.23.55.167',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        $userSub = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 5000,
+            'action' => 'create',
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(20)->toDateString(),
+            'file_path' => 'files/' . $user->id . '_peerlegacyregular_' . $server->id . '_31_03_2026_18_00.zip',
+            'server_id' => $server->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'vpn_plan_code' => null,
+            'vpn_plan_name' => null,
+            'vpn_traffic_limit_bytes' => null,
+            'next_vpn_plan_code' => null,
+        ]);
+
+        $response = $this->actingAs($user)->postJson(route('user-subscription.next-vpn-plan'), [
+            'user_subscription_id' => $userSub->id,
+            'vpn_plan_code' => 'regular_basic',
+        ]);
+
+        $response->assertOk();
+        $this->assertStringContainsString('В дату продления понадобится новая инструкция и новый конфиг.', (string) $response->json('message'));
+    }
+
     public function test_new_tariff_card_cannot_schedule_next_plan(): void
     {
         $user = User::factory()->create([
@@ -151,6 +195,53 @@ class UserSubscriptionScheduleNextPlanTest extends TestCase
         $this->assertDatabaseHas('user_subscriptions', [
             'id' => $userSub->id,
             'is_rebilling' => true,
+        ]);
+    }
+
+    public function test_user_can_cancel_selected_next_vpn_plan(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+
+        $server = Server::query()->create([
+            'ip1' => '84.23.55.167',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        $userSub = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 5000,
+            'action' => 'create',
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(20)->toDateString(),
+            'file_path' => 'files/' . $user->id . '_peerclear_' . $server->id . '_31_03_2026_18_00.zip',
+            'server_id' => $server->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'vpn_plan_code' => null,
+            'vpn_plan_name' => null,
+            'vpn_traffic_limit_bytes' => null,
+            'next_vpn_plan_code' => 'restricted_standard',
+        ]);
+
+        $response = $this->actingAs($user)->post(route('user-subscription.clear-next-vpn-plan'), [
+            'user_subscription_id' => $userSub->id,
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('user_subscriptions', [
+            'id' => $userSub->id,
+            'next_vpn_plan_code' => null,
+            'is_rebilling' => false,
         ]);
     }
 }

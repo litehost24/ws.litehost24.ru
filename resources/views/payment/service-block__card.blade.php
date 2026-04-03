@@ -26,6 +26,10 @@
         : false;
     $nextVpnPlanCode = trim((string) ($userSub->next_vpn_plan_code ?? ''));
     $nextVpnPlanLabel = $userSub?->nextVpnPlanLabel();
+    $nextVpnPlanData = $nextVpnPlanCode !== '' ? app(\App\Services\VpnPlanCatalog::class)->find($nextVpnPlanCode) : null;
+    $nextVpnPlanNeedsNewConfig = $userSub && $nextVpnPlanData
+        ? $userSub->resolveVpnAccessMode() !== \App\Models\Server::normalizeVpnAccessMode((string) ($nextVpnPlanData['vpn_access_mode'] ?? ''))
+        : false;
     $pendingVpnAccessModeDisconnectAt = $userSub?->pendingVpnAccessModeDisconnectAt();
     $hasPendingVpnAccessModeSwitch = $userSub?->hasPendingVpnAccessModeSwitch() ?? false;
     $pendingVpnAccessModeText = $pendingVpnAccessModeDisconnectAt
@@ -187,7 +191,7 @@
                 <span class="text-orange service-block__status">
                     Заявка в обработке на подключение
                 </span>
-            @elseif ($subInfo->isRebillActive())
+            @elseif ($isLegacyVpnCard && $subInfo->isConnected() && !$subInfo->isExpired())
                 @if ($isLegacyVpnCard)
                     <span class="{{ $statusColorClass }} service-block__status">
                         старый тариф действует до {{ $subInfo->getEndDate() }}
@@ -195,11 +199,11 @@
                             , затем — {{ $nextVpnPlanLabel }}
                         @endif
                     </span>
-                @else
-                    <span class="{{ $statusColorClass }} service-block__status">
-                        очередное списание {{ $subInfo->getEndDate() }}
-                    </span>
                 @endif
+            @elseif ($subInfo->isRebillActive())
+                <span class="{{ $statusColorClass }} service-block__status">
+                    очередное списание {{ $subInfo->getEndDate() }}
+                </span>
             @elseif ($subInfo->isConnected())
                 <span class="{{ $connectedStatusClass }} service-block__status">
                     подписка истекает {{ $subInfo->getEndDate() }}
@@ -251,6 +255,11 @@
                     <div class="service-block__legacy-plan-next">
                         Со следующего периода будет: <strong>{{ $nextVpnPlanLabel }}</strong>
                     </div>
+                    @if ($nextVpnPlanNeedsNewConfig)
+                        <div class="service-block__legacy-plan-next">
+                            После продления понадобится новая инструкция и новый конфиг.
+                        </div>
+                    @endif
                 @endif
             </div>
             <details class="service-block__legacy-plan-details">
@@ -287,6 +296,15 @@
                             Сохранить тариф на следующий период
                         </button>
                     </form>
+                    @if ($nextVpnPlanLabel)
+                        <form method="POST" action="{{ route('user-subscription.clear-next-vpn-plan') }}" class="service-block__legacy-plan-form">
+                            @csrf
+                            <input type="hidden" name="user_subscription_id" value="{{ (int) $userSub->id }}">
+                            <button type="submit" class="service-block__action-btn service-block__action-btn--danger service-block__legacy-plan-submit">
+                                Отменить выбранный тариф
+                            </button>
+                        </form>
+                    @endif
                 </div>
             </details>
         </div>

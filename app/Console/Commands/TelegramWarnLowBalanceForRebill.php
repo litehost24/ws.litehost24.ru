@@ -9,6 +9,7 @@ use App\Models\UserSubscription;
 use App\Services\Payments\MonetaPaymentLinkService;
 use App\Services\ReferralPricingService;
 use App\Services\Telegram\TelegramApiClient;
+use App\Services\VpnPlanCatalog;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -161,6 +162,16 @@ class TelegramWarnLowBalanceForRebill extends Command
         }
 
         $referrer = $user->referrer;
-        return $this->pricing->getFinalPriceCents($subscription, $referrer, $user);
+        $basePrice = (int) $subscription->price;
+        if (trim((string) $subscription->name) === 'VPN') {
+            $planCode = trim((string) ($row->next_vpn_plan_code ?? ''));
+            if ($planCode === '') {
+                $planCode = trim((string) ($row->vpn_plan_code ?? ''));
+            }
+
+            $basePrice = app(VpnPlanCatalog::class)->resolveBasePriceCents($subscription, $planCode);
+        }
+
+        return $this->pricing->getFinalPriceCents($subscription, $referrer, $user, $basePrice);
     }
 }

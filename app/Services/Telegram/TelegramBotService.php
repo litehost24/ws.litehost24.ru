@@ -895,14 +895,32 @@ class TelegramBotService
         $end = (string) $row->end_date;
         $rebill = $row->is_rebilling ? 'да' : 'нет';
         $note = trim((string) ($row->note ?? ''));
+        $nextPlanLabel = $row->nextVpnPlanLabel();
+        $nextPlan = $nextPlanLabel ? app(\App\Services\VpnPlanCatalog::class)->find((string) ($row->next_vpn_plan_code ?? '')) : null;
+        $nextPlanNeedsNewConfig = $nextPlan !== null
+            && $row->resolveVpnAccessMode() !== \App\Models\Server::normalizeVpnAccessMode((string) ($nextPlan['vpn_access_mode'] ?? ''));
 
         $filePath = (string) ($row->file_path ?? '');
 
         $baseLines = [
             "{$name}",
             "До: {$end}",
-            "Автопродление: {$rebill}",
         ];
+
+        if ($row->isLegacyVpnPlan()) {
+            $baseLines[] = "Старый тариф: действует до {$end}";
+            if ($nextPlanLabel) {
+                $baseLines[] = "Следующий тариф: {$nextPlanLabel}";
+                if ($nextPlanNeedsNewConfig) {
+                    $baseLines[] = 'После продления понадобится новая инструкция и новый конфиг.';
+                }
+            } else {
+                $baseLines[] = 'Новый тариф не выбран: подписка остановится в дату окончания.';
+            }
+        } else {
+            $baseLines[] = "Автопродление: {$rebill}";
+        }
+
         if ($note !== '') {
             $baseLines[] = "Пометка: {$note}";
         }

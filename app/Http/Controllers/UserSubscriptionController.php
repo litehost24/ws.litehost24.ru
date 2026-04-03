@@ -212,6 +212,19 @@ class UserSubscriptionController extends Controller
         }
 
         $userSubscriptionId = (int) request()->get('user_subscription_id');
+        $currentUserSub = $this->findUserSubscriptionForCard((int) $sub->id, $userSubscriptionId > 0 ? $userSubscriptionId : null);
+
+        if ($currentUserSub && $this->isLegacyVpnSubscription($currentUserSub, $sub)) {
+            $message = trim((string) ($currentUserSub->next_vpn_plan_code ?? '')) !== ''
+                ? 'Для старого тарифа ручное продление отключено. Новый тариф уже выбран и активируется автоматически после продления.'
+                : 'Старый тариф больше не продлевается. Выберите новый тариф со следующего периода.';
+
+            if (request()->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
 
         $fullConnectSubscription = new FullConnectSubscription($sub);
 
@@ -662,10 +675,55 @@ class UserSubscriptionController extends Controller
             'is_rebilling' => true,
         ]);
 
-        $message = sprintf(
-            'Со следующего периода будет: %s. Текущий тариф продолжит работать до конца оплаченного периода.',
-            (string) ($plan['label'] ?? $planCode)
-        );
+        $message = $this->scheduledNextPlanMessage($userSub, $planCode, $plan);
+
+        if ($request->expectsJson()) {
+            return $this->subscriptionCardJson($subscription, $message, (int) $userSub->id);
+        }
+
+        return redirect()->back()->with('subscription-success', $message);
+    }
+
+    public function clearNextVpnPlan(Request $request): RedirectResponse|JsonResponse
+    {
+        if (!in_array(Auth::user()->role, ['user', 'admin', 'partner'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Выбор тарифа недоступен.'], 403, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Выбор тарифа недоступен.');
+        }
+
+        $data = $request->validate([
+            'user_subscription_id' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $userSub = $this->findVisibleUserSubscription((int) $data['user_subscription_id']);
+        if (!$userSub) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Подписка не найдена.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Подписка не найдена.');
+        }
+
+        $subscription = $userSub->subscription;
+        if (!$this->isLegacyVpnSubscription($userSub, $subscription)) {
+            $message = 'Отмена следующего тарифа доступна только для старой VPN-подписки.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
+        $userSub->update([
+            'next_vpn_plan_code' => null,
+            'is_rebilling' => false,
+        ]);
+
+        $message = 'Выбор следующего тарифа отменён. Подписка остановится в дату окончания.';
 
         if ($request->expectsJson()) {
             return $this->subscriptionCardJson($subscription, $message, (int) $userSub->id);
@@ -924,6 +982,30 @@ class UserSubscriptionController extends Controller
         }
 
         return $catalog->defaultRegularPlanCode();
+    }
+
+    private function isLegacyVpnSubscription(?UserSubscription $userSub, ?Subscription $subscription): bool
+    {
+        return $userSub !== null
+            && $subscription !== null
+            && trim((string) $subscription->name) === 'VPN'
+            && $userSub->isLegacyVpnPlan();
+    }
+
+    private function scheduledNextPlanMessage(UserSubscription $userSub, string $planCode, array $plan): string
+    {
+        $message = sprintf(
+            'Со следующего периода будет: %s. Текущий тариф продолжит работать до конца оплаченного периода.',
+            (string) ($plan['label'] ?? $planCode)
+        );
+
+        $currentMode = $userSub->resolveVpnAccessMode();
+        $targetMode = Server::normalizeVpnAccessMode((string) ($plan['vpn_access_mode'] ?? ''));
+        if ($currentMode !== $targetMode) {
+            $message .= ' В дату продления понадобится новая инструкция и новый конфиг.';
+        }
+
+        return $message;
     }
 
     private function vpnAccessModePreparedMessage(UserSubscription $userSub): string
