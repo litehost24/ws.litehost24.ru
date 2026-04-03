@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\UserSubscription;
 use App\Models\components\FullConnectSubscription;
 use App\Services\ReferralPricingService;
+use App\Services\VpnPlanCatalog;
 use Illuminate\Support\Facades\Auth;
 
 class TelegramSubscriptionService
@@ -23,9 +24,12 @@ class TelegramSubscriptionService
                 return null;
             }
 
+            $catalog = app(VpnPlanCatalog::class);
+            $planCode = $catalog->defaultPurchasePlanCode();
             $pricing = app(ReferralPricingService::class);
             $referrer = $user->referrer;
-            $finalPrice = $pricing->getFinalPriceCents($vpnSub, $referrer, $user);
+            $basePrice = $catalog->resolveBasePriceCents($vpnSub, $planCode);
+            $finalPrice = $pricing->getFinalPriceCents($vpnSub, $referrer, $user, $basePrice);
             return (int) ($finalPrice / 100);
         } finally {
             if ($prev) {
@@ -58,16 +62,19 @@ class TelegramSubscriptionService
                 return ['ok' => false, 'message' => 'VPN-подписки не найдены.'];
             }
 
+            $catalog = app(VpnPlanCatalog::class);
+            $planCode = $catalog->defaultPurchasePlanCode();
             $pricing = app(ReferralPricingService::class);
             $referrer = $user->referrer;
-            $finalPrice = $pricing->getFinalPriceCents($sub, $referrer, $user);
+            $basePrice = $catalog->resolveBasePriceCents($sub, $planCode);
+            $finalPrice = $pricing->getFinalPriceCents($sub, $referrer, $user, $basePrice);
 
             $balanceCents = (new Balance)->getBalance($user->id);
             if ($balanceCents < (int) $finalPrice) {
                 return ['ok' => false, 'message' => 'Недостаточно средств. Сначала пополните баланс.'];
             }
 
-            (new FullConnectSubscription($sub, $note, Server::VPN_ACCESS_WHITE_IP))->create();
+            (new FullConnectSubscription($sub, $note, Server::VPN_ACCESS_WHITE_IP, $planCode))->create();
 
             $row = UserSubscription::query()
                 ->where('user_id', $user->id)
