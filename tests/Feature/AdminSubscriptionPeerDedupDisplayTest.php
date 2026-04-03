@@ -221,4 +221,55 @@ class AdminSubscriptionPeerDedupDisplayTest extends TestCase
         $this->assertSame('enabled', $activeRow->server_status);
         $this->assertFalse((bool) $activeRow->has_server_status_conflict);
     }
+
+    public function test_admin_subscriptions_index_hides_live_server_status_for_inactive_row(): void
+    {
+        $admin = User::factory()->create([
+            'role' => 'admin',
+            'email_verified_at' => now(),
+        ]);
+
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $server = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'url1' => 'https://node1.example',
+            'username1' => 'u1',
+            'password1' => 'p1',
+        ]);
+
+        $subscription = Subscription::factory()->create(['name' => 'VPN']);
+
+        UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'action' => 'activate',
+            'price' => 5000,
+            'is_processed' => true,
+            'is_rebilling' => false,
+            'end_date' => Carbon::today()->subDay()->toDateString(),
+            'file_path' => 'files/' . $user->id . '_61_' . $server->id . '_01_04_2026_12_00/' . $user->id . '_61_' . $server->id . '_01_04_2026_12_00.zip',
+            'server_id' => $server->id,
+        ]);
+
+        DB::table('vpn_peer_server_states')->insert([
+            'server_id' => $server->id,
+            'peer_name' => '61',
+            'server_status' => 'enabled',
+            'status_fetched_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.subscriptions.index'));
+
+        $response->assertOk();
+        $response->assertSee('Неактивна', false);
+        $response->assertDontSee('Включена', false);
+    }
 }

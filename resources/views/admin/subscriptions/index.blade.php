@@ -171,6 +171,9 @@
                                 if ($status === 'shadowed') {
                                     return '<span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-500 font-bold" title="Историческая строка">—</span>';
                                 }
+                                if ($status === 'historical') {
+                                    return '<span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-500 font-bold" title="Неактивная строка">—</span>';
+                                }
                                 return '<span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-700 font-bold" title="Неизвестно">?</span>';
                             };
                             $modeBadgeClass = function ($mode) {
@@ -627,7 +630,9 @@
                                             @endif
                                         </td>
                                         <td class="px-2 py-2 whitespace-nowrap">
-                                            @if($first->server_status === 'enabled')
+                                            @if(!$first->is_active)
+                                                <span class="text-sm text-gray-400">—</span>
+                                            @elseif($first->server_status === 'enabled')
                                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Включена</span>
                                             @elseif($first->server_status === 'disabled')
                                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Отключена</span>
@@ -640,8 +645,8 @@
                                             @endif
                                         </td>
                                         <td class="px-2 py-2 whitespace-nowrap">
-                                            {!! $statusIcon($first->effective_status) !!}
-                                            @if($first->has_server_status_conflict)
+                                            {!! $statusIcon($first->is_active ? $first->effective_status : 'historical') !!}
+                                            @if($first->is_active && $first->has_server_status_conflict)
                                                 <span class="ms-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-yellow-100 text-yellow-800 font-bold" title="Конфликт">!</span>
                                             @endif
                                         </td>
@@ -787,7 +792,9 @@
                                                 @endif
                                             </td>
                                             <td class="px-2 py-2 whitespace-nowrap">
-                                                @if($sub->server_status === 'enabled')
+                                                @if(!$sub->is_active)
+                                                    <span class="text-sm text-gray-400">—</span>
+                                                @elseif($sub->server_status === 'enabled')
                                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Включена</span>
                                                 @elseif($sub->server_status === 'disabled')
                                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Отключена</span>
@@ -800,8 +807,8 @@
                                                 @endif
                                             </td>
                                             <td class="px-2 py-2 whitespace-nowrap">
-                                                {!! $statusIcon($sub->effective_status) !!}
-                                                @if($sub->has_server_status_conflict)
+                                                {!! $statusIcon($sub->is_active ? $sub->effective_status : 'historical') !!}
+                                                @if($sub->is_active && $sub->has_server_status_conflict)
                                                     <span class="ms-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-yellow-100 text-yellow-800 font-bold" title="Конфликт">!</span>
                                                 @endif
                                             </td>
