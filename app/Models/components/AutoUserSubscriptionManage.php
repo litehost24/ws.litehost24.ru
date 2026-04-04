@@ -134,6 +134,11 @@ class AutoUserSubscriptionManage
                 continue;
             }
 
+            if ($this->shouldStopLegacyVpnWithoutNextPlan($awaitSub, $subs)) {
+                $this->stopAwaitPaymentLegacyWithoutNextPlan($awaitSub);
+                continue;
+            }
+
             if ($this->isEnoughBalance($awaitSub)) {
                 $this->processActivation($awaitSub, $subs);
             }
@@ -494,6 +499,20 @@ class AutoUserSubscriptionManage
 
         return trim((string) ($userSub->vpn_plan_code ?? '')) === ''
             && trim((string) ($userSub->next_vpn_plan_code ?? '')) === '';
+    }
+
+    private function stopAwaitPaymentLegacyWithoutNextPlan(object $userSub): void
+    {
+        UserSubscription::where('id', $userSub->id)->update([
+            'action' => 'deactivate',
+            'is_processed' => false,
+            'is_rebilling' => false,
+            'action_status' => 'success',
+            'action_error' => 'Для продления выберите новый тариф.',
+            'action_attempts' => 0,
+        ]);
+
+        Log::info("Stopped await payment legacy VPN without next plan - User_id: {$userSub->user_id}, subscription_id: {$userSub->subscription_id}");
     }
 
     private function currentPlanSnapshot(object $userSub): array
