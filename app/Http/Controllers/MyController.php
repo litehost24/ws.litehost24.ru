@@ -132,6 +132,8 @@ class MyController extends Controller
                 'is_rebilling',
                 'end_date',
                 'created_at',
+                'vpn_plan_code',
+                'vpn_plan_name',
             ]);
 
         $topupsHistory = collect();

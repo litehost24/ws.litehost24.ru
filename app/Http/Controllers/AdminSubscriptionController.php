@@ -703,6 +703,8 @@ class AdminSubscriptionController extends Controller
                 'is_rebilling',
                 'end_date',
                 'created_at',
+                'vpn_plan_code',
+                'vpn_plan_name',
             ]);
 
         $totalPayments = (int) $payments->sum('amount');
@@ -726,6 +728,7 @@ class AdminSubscriptionController extends Controller
                     'id' => $row->id,
                     'subscription_id' => $row->subscription_id,
                     'subscription_name' => $row->subscription?->name ?? 'N/A',
+                    'vpn_plan_name' => $row->vpnPlanLabel(),
                     'price' => (int) $row->price,
                     'price_rub' => number_format(((int) $row->price) / 100, 2, '.', ''),
                     'end_date' => $row->end_date,
@@ -770,6 +773,7 @@ class AdminSubscriptionController extends Controller
                     'id' => $row->id,
                     'subscription_id' => $row->subscription_id,
                     'subscription_name' => $row->subscription?->name ?? 'N/A',
+                    'vpn_plan_name' => $row->vpnPlanLabel(),
                     'price' => (int) $row->price,
                     'price_rub' => number_format(((int) $row->price) / 100, 2, '.', ''),
                     'action' => $row->action,

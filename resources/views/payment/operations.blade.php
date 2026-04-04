@@ -64,10 +64,18 @@
                                 </thead>
                                 <tbody>
                                 @forelse($chargesHistory as $charge)
+                                    @php
+                                        $chargePlanLabel = $charge->vpnPlanLabel();
+                                    @endphp
                                     <tr class="{{ $loop->even ? 'bg-gray-50' : '' }}">
                                         <td class="px-2 py-2 whitespace-nowrap">{{ optional($charge->created_at)->format('Y-m-d') }}</td>
                                         <td class="px-2 py-2 whitespace-nowrap">{{ $charge->end_date }}</td>
-                                        <td class="px-2 py-2 whitespace-nowrap">{{ $charge->subscription?->name ?? 'N/A' }} (#{{ $charge->subscription_id }})</td>
+                                        <td class="px-2 py-2 whitespace-nowrap">
+                                            {{ $charge->subscription?->name ?? 'N/A' }} (#{{ $charge->subscription_id }})
+                                            @if($chargePlanLabel)
+                                                · {{ $chargePlanLabel }}
+                                            @endif
+                                        </td>
                                         <td class="px-2 py-2 whitespace-nowrap">{{ number_format(((int)$charge->price) / 100, 2, '.', ' ') }} &#8381;</td>
                                         <td class="px-2 py-2 whitespace-nowrap">{{ $charge->action }}</td>
                                         <td class="px-2 py-2 whitespace-nowrap">{{ $charge->is_rebilling ? '&#10003;' : '&mdash;' }}</td>

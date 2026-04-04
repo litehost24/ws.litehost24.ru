@@ -1284,10 +1284,11 @@
                         const chargeRows = (data.charges || []).map(function (item, index) {
                             const createdDate = item.created_at ? String(item.created_at).slice(0, 10) : '—';
                             const rowClass = index % 2 === 1 ? ' bg-gray-50' : '';
+                            const planSuffix = item.vpn_plan_name ? (' · ' + escapeHtml(item.vpn_plan_name)) : '';
                             return '<tr class=\"border-t border-gray-100' + rowClass + '\">'
                                 + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(createdDate) + '</td>'
                                 + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.end_date || '—') + '</td>'
-                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.subscription_name || 'N/A') + ' (#' + escapeHtml(item.subscription_id) + ')</td>'
+                                + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.subscription_name || 'N/A') + ' (#' + escapeHtml(item.subscription_id) + ')' + planSuffix + '</td>'
                                 + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.price_rub || '0.00') + ' руб.</td>'
                                 + '<td class=\"px-2 py-2 whitespace-nowrap\">' + escapeHtml(item.action || '—') + '</td>'
                                 + '<td class=\"px-2 py-2 whitespace-nowrap\">' + (item.is_rebilling ? '✓' : '—') + '</td>'

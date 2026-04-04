@@ -186,6 +186,8 @@ class UserSubscriptionTopupPurchaseTest extends TestCase
             'is_processed' => true,
             'is_rebilling' => true,
             'end_date' => Carbon::today()->addDays(20)->toDateString(),
+            'vpn_plan_code' => 'restricted_standard',
+            'vpn_plan_name' => 'Стандарт',
         ]);
 
         UserSubscriptionTopup::query()->create([
@@ -202,6 +204,8 @@ class UserSubscriptionTopupPurchaseTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Докупка трафика для режима при ограничениях', false);
+        $response->assertSee('VPN (#' . $subscription->id . ')', false);
+        $response->assertSee('Стандарт', false);
         $response->assertSee('10 ГБ', false);
         $response->assertSee('250.00', false);
     }
