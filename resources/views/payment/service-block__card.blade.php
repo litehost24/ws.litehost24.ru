@@ -3,7 +3,7 @@
     $userSub = $userSub ?? null;
     $sub = $sub ?? $userSub?->subscription;
     $subDisplayName = (isset($sub->name) && trim((string) $sub->name) === 'VPN')
-        ? 'Доступ'
+        ? 'Подключение'
         : (string) ($sub->name ?? '');
 
     if ($userSub) {
