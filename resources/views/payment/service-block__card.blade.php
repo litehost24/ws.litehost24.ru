@@ -15,11 +15,11 @@
     $cardKey = $userSub ? (int) $userSub->id : (int) $sub->id;
     $instructionTargetId = $cardKey;
     $userSubscriptionQuery = $userSub ? '&user_subscription_id=' . (int) $userSub->id : '';
-    $vpnAccessModeLabel = $userSub?->vpnAccessModeLabel();
+    $vpnAccessModeLabel = $userSub?->vpnAccessModeCabinetLabel() ?? $userSub?->vpnAccessModeLabel();
     $vpnPlanLabel = $userSub?->vpnPlanLabel();
     $displayPlanLabel = $vpnPlanLabel && $vpnPlanLabel !== $vpnAccessModeLabel ? $vpnPlanLabel : null;
     $switchTargetMode = $userSub?->switchTargetVpnAccessMode();
-    $switchTargetLabel = $switchTargetMode ? (\App\Models\Server::vpnAccessModeOptions()[$switchTargetMode] ?? null) : null;
+    $switchTargetLabel = $switchTargetMode ? ($userSub?->vpnAccessModeCabinetLabelFor($switchTargetMode) ?? (\App\Models\Server::vpnAccessModeOptions()[$switchTargetMode] ?? null)) : null;
     $canSwitchVpnAccessMode = $userSub?->canSwitchVpnAccessMode() ?? false;
     $isLegacyVpnCard = $userSub
         ? trim((string) ($userSub->vpn_plan_code ?? '')) === ''
@@ -379,7 +379,7 @@
                data-confirm="{{ $switchWarningText }}"
                title="{{ $switchWarningText }}"
                aria-label="{{ $switchWarningText }}">
-                Переключить на {{ $switchTargetMode === \App\Models\Server::VPN_ACCESS_WHITE_IP ? 'подключение при ограничениях' : 'обычное подключение' }}
+                Переключить на {{ $switchTargetMode === \App\Models\Server::VPN_ACCESS_WHITE_IP ? 'мобильную связь' : 'домашний интернет' }}
             </a>
         @endif
 

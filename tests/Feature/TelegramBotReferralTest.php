@@ -397,15 +397,13 @@ class TelegramBotReferralTest extends TestCase
         $menuText = (string) $menuResponse->json('text');
         $this->assertStringContainsString('Выберите тариф VPN:', $menuText);
         $this->assertStringContainsString('🏠 Обычное — 100 ₽/мес', $menuText);
-        $this->assertStringContainsString('Подходит для Wi‑Fi и проводного интернета.', $menuText);
+        $this->assertStringContainsString('Для Wi‑Fi и проводного интернета.', $menuText);
         $this->assertStringContainsString('📶 МТС — 100 ₽/мес', $menuText);
-        $this->assertStringContainsString('Только для сети МТС. Тестовый тариф, доступность не гарантируется.', $menuText);
+        $this->assertStringContainsString('Для мобильной сети МТС.', $menuText);
         $this->assertStringContainsString('📶 Эконом — 100 ₽/мес', $menuText);
-        $this->assertStringContainsString('Подключение при ограничениях, 10 ГБ в месяц.', $menuText);
+        $this->assertStringContainsString('Для мобильной связи.', $menuText);
         $this->assertStringContainsString('📶 Стандарт — 200 ₽/мес', $menuText);
-        $this->assertStringContainsString('Подключение при ограничениях, 30 ГБ в месяц.', $menuText);
         $this->assertStringContainsString('📶 Премиум — 300 ₽/мес', $menuText);
-        $this->assertStringContainsString('Подключение при ограничениях, 50 ГБ в месяц.', $menuText);
 
         $keyboard = collect($menuResponse->json('reply_markup.keyboard') ?? []);
         $buttonTexts = $keyboard->flatten(1)->pluck('text')->all();

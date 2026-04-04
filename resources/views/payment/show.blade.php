@@ -113,10 +113,10 @@
                                                 $planTrafficText = !empty($plan['traffic_label'])
                                                     ? (string) $plan['traffic_label']
                                                     : ($planMode === \App\Models\Server::VPN_ACCESS_REGULAR
-                                                        ? 'Безлимит по гигабайтам для обычного подключения'
+                                                        ? 'Без ограничений по трафику'
                                                         : ($planLimitGb !== null
-                                                            ? ($planLimitGb . ' ГБ в режиме при ограничениях')
-                                                            : 'Без пакета трафика режима при ограничениях'));
+                                                            ? ($planLimitGb . ' ГБ интернета')
+                                                            : 'Без ограничений по трафику'));
                                             @endphp
                                             <label class="vpn-plan-option">
                                                 <input
@@ -140,7 +140,7 @@
                                                                     </svg>
                                                                 @else
                                                                     <svg viewBox="0 0 20 20" fill="none">
-                                                                        <path d="M10 16.5v-2.5m3.7.2a5.2 5.2 0 0 0-7.4 0m10-2.7a9 9 0 0 0-12.6 0m15.3-2.8a12.8 12.8 0 0 0-18 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                                                                        <path d="M4 15.5h1.5V13H4v2.5Zm3.5 0H9v-4.5H7.5v4.5Zm3.5 0h1.5V8H11v7.5Zm3.5 0H16v-11h-1.5v11Z" fill="currentColor"/>
                                                                     </svg>
                                                                 @endif
                                                             </span>
@@ -152,11 +152,11 @@
                                                         @if(!empty($plan['traffic_label']))
                                                             <span class="vpn-plan-option__traffic {{ $planMode === \App\Models\Server::VPN_ACCESS_REGULAR ? 'vpn-plan-option__traffic--unlimited' : '' }}">{{ $plan['traffic_label'] }}</span>
                                                         @elseif($planMode === \App\Models\Server::VPN_ACCESS_REGULAR)
-                                                            <span class="vpn-plan-option__traffic vpn-plan-option__traffic--unlimited">Безлимит по гигабайтам</span>
+                                                            <span class="vpn-plan-option__traffic vpn-plan-option__traffic--unlimited">Без ограничений по трафику</span>
                                                         @elseif($planLimitGb !== null)
-                                                            <span class="vpn-plan-option__traffic">{{ $planLimitGb }} ГБ в режиме при ограничениях</span>
+                                                            <span class="vpn-plan-option__traffic">{{ $planLimitGb }} ГБ интернета</span>
                                                         @else
-                                                            <span class="vpn-plan-option__traffic">Без пакета трафика режима при ограничениях</span>
+                                                            <span class="vpn-plan-option__traffic">Без ограничений по трафику</span>
                                                         @endif
                                                         @if(!empty($plan['description']))
                                                             <span class="vpn-plan-option__description">{{ $plan['description'] }}</span>
@@ -184,7 +184,7 @@
                                     <div class="flex flex-wrap items-center gap-3">
                                         <label class="inline-flex h-10 items-center gap-2 rounded-md border border-gray-300 bg-gray-50 px-3 text-sm text-gray-700">
                                             <input type="checkbox" name="need_white_ip" value="1" class="rounded border-gray-300" checked>
-                                            <span>Подключение при ограничениях</span>
+                                            <span>Для мобильной связи</span>
                                         </label>
                                         <span id="next-vpn-price" class="text-xs text-gray-500" @if(is_null($nextVpnPriceRub)) style="display:none;" @endif>
                                             Следующая цена: <span id="next-vpn-price-value">{{ $nextVpnPriceRub }}</span> ₽/мес
@@ -193,8 +193,8 @@
                                 @endif
                             </div>
                             <div class="mt-2 text-xs text-gray-500">
-                                Тариф определяет режим подключения и цену продления. Для планов «Эконом», «Стандарт» и «Премиум»
-                                трафик считается только в режиме при ограничениях; обычное подключение остаётся отдельным режимом.
+                                Обычное подключение подходит для Wi‑Fi и проводного интернета. МТС, Эконом, Стандарт и Премиум
+                                рассчитаны на мобильную связь.
                             </div>
                         </form>
                     @endif

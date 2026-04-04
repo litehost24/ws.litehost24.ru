@@ -686,8 +686,8 @@ class TelegramBotService
                 'description_line' => trim((string) ($plan['description'] ?? '')) !== ''
                     ? (string) $plan['description']
                     : ($mode === \App\Models\Server::VPN_ACCESS_REGULAR
-                        ? 'Для Wi‑Fi и проводного интернета, безлимит по гигабайтам.'
-                        : sprintf('%s в режиме при ограничениях.', $suffix)),
+                        ? 'Для Wi‑Fi и проводного интернета.'
+                        : 'Для мобильной связи.'),
             ];
         }
 

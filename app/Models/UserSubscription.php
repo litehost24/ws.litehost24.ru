@@ -542,6 +542,34 @@ class UserSubscription extends Model
         return Server::vpnAccessModeOptions()[$mode] ?? null;
     }
 
+    /**
+     * User-facing labels for cabinet cards and action buttons.
+     *
+     * @return array<string, string>
+     */
+    public static function vpnAccessModeCabinetOptions(): array
+    {
+        return [
+            Server::VPN_ACCESS_REGULAR => 'Домашний интернет',
+            Server::VPN_ACCESS_WHITE_IP => 'Мобильная связь',
+        ];
+    }
+
+    public function vpnAccessModeCabinetLabel(): ?string
+    {
+        return $this->vpnAccessModeCabinetLabelFor($this->resolveVpnAccessMode());
+    }
+
+    public function vpnAccessModeCabinetLabelFor(?string $mode): ?string
+    {
+        $mode = $mode !== null ? Server::normalizeVpnAccessMode($mode) : null;
+        if ($mode === null) {
+            return null;
+        }
+
+        return self::vpnAccessModeCabinetOptions()[$mode] ?? null;
+    }
+
     public function vpnPlan(): ?array
     {
         $planCode = trim((string) ($this->vpn_plan_code ?? ''));

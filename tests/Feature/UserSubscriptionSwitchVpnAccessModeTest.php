@@ -92,10 +92,10 @@ class UserSubscriptionSwitchVpnAccessModeTest extends TestCase
         $this->assertNotNull($targetState->status_fetched_at);
 
         $cardsHtml = (string) $response->json('cards_html');
-        $this->assertStringContainsString('Обычное подключение', $cardsHtml);
+        $this->assertStringContainsString('Домашний интернет', $cardsHtml);
         $this->assertStringContainsString('Инструкция', $cardsHtml);
         $this->assertStringContainsString('Старая настройка отключится автоматически', $cardsHtml);
-        $this->assertStringNotContainsString('Переключить на подключение при ограничениях', $cardsHtml);
+        $this->assertStringNotContainsString('Переключить на мобильную связь', $cardsHtml);
     }
 
     public function test_user_cannot_start_second_mode_switch_while_grace_period_is_active(): void

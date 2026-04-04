@@ -78,9 +78,8 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertSee('100 ₽/мес', false);
         $response->assertSee('200 ₽/мес', false);
         $response->assertSee('300 ₽/мес', false);
-        $response->assertSee('Безлимит по гигабайтам', false);
-        $response->assertSee('Безлимит только для сети МТС', false);
-        $response->assertSee('Только для сети МТС. Тестовый тариф, доступность не гарантируется.', false);
+        $response->assertSee('Без ограничений по трафику', false);
+        $response->assertSee('Для мобильной сети МТС.', false);
         $response->assertSee('пакет периода:', false);
         $response->assertSee('использовано:', false);
         $response->assertSee('осталось:', false);
@@ -88,7 +87,7 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertSee('10 ГБ', false);
         $response->assertSee('50 ₽', false);
         $response->assertSee('Неиспользованный остаток на следующий период не переносится.', false);
-        $response->assertDontSee('Переключить на обычное подключение', false);
+        $response->assertDontSee('Переключить на домашний интернет', false);
     }
 
     public function test_my_main_keeps_switch_button_for_legacy_vpn_card(): void
@@ -129,15 +128,15 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response = $this->actingAs($user)->get(route('my.main'));
 
         $response->assertOk();
-        $response->assertSee('Переключить на обычное подключение', false);
+        $response->assertSee('Переключить на домашний интернет', false);
         $response->assertSee('Старый тариф', false);
         $response->assertSee('Этот тариф больше не оформляется.', false);
         $response->assertSee('Выбрать новый тариф со следующего периода', false);
         $response->assertSee('Без выбора нового тарифа подписка остановится в дату окончания.', false);
         $response->assertSee('старый тариф действует до', false);
-        $response->assertSee('🏠 Обычное подключение — 100 ₽/мес · безлимит', false);
-        $response->assertSee('📶 Для сети МТС (бета) — 100 ₽/мес · Безлимит только для сети МТС', false);
-        $response->assertSee('📶 Стандарт — 200 ₽/мес · 30 ГБ', false);
+        $response->assertSee('🏠 Обычное подключение — 100 ₽/мес · Без ограничений по трафику', false);
+        $response->assertSee('📶 Для сети МТС (бета) — 100 ₽/мес · Без ограничений по трафику', false);
+        $response->assertSee('📶 Стандарт — 200 ₽/мес · 30 ГБ интернета', false);
         $response->assertDontSee('очередное списание', false);
         $response->assertDontSee('Отключить автопродление', false);
         $response->assertDontSee('Включить автопродление', false);
