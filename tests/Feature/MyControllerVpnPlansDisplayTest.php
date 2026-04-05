@@ -88,6 +88,7 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertSee('50 ₽', false);
         $response->assertSee('Неиспользованный остаток на следующий период не переносится.', false);
         $response->assertDontSee('Переключить на домашний интернет', false);
+        $response->assertDontSee('Перейти на Эконом', false);
     }
 
     public function test_my_main_keeps_switch_button_for_legacy_vpn_card(): void
@@ -215,6 +216,8 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response = $this->actingAs($user)->get(route('my.main'));
 
         $response->assertOk();
+        $response->assertSee('Перейти на Эконом', false);
+        $response->assertSee('Если связь через МТС перестала работать, можно перейти на Эконом без доплаты до конца текущего периода.', false);
         $response->assertSee('трафик за период: 3.00 ГБ', false);
         $response->assertDontSee('трафик Amnezia:', false);
         $response->assertDontSee('8.00 ГБ', false);

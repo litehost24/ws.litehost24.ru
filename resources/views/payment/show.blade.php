@@ -1682,7 +1682,7 @@
                         attachSubActionLinks(updatedRows);
                     }
 
-                    if (action === 'switch-mode') {
+                    if (action === 'switch-mode' || action === 'switch-plan') {
                         const updatedCard = findSubscriptionCardByHtml(data.card_html);
                         instructionSubIdToOpen = getInstructionSubId(updatedCard);
                     }
@@ -1692,7 +1692,7 @@
                         attachNoteForms(updatedCard);
                         attachSubActionLinks(updatedCard);
 
-                        if (action === 'switch-mode') {
+                        if (action === 'switch-mode' || action === 'switch-plan') {
                             instructionSubIdToOpen = getInstructionSubId(updatedCard);
                         }
                     }

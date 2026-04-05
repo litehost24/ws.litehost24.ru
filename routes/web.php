@@ -90,6 +90,8 @@ Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified']
     Route::get('/user-subscription/toggle-rebill', [UserSubscriptionController::class, 'toggleRebill']);
     Route::get('/user-subscription/switch-vpn-access-mode', [UserSubscriptionController::class, 'switchVpnAccessMode'])
         ->name('user-subscription.switch-vpn-access-mode');
+    Route::get('/user-subscription/switch-mts-beta-to-economy', [UserSubscriptionController::class, 'switchMtsBetaToEconomy'])
+        ->name('user-subscription.switch-mts-beta-to-economy');
     Route::get('/user-subscription/download', [UserSubscriptionController::class, 'download'])->name('user-subscription.download');
     Route::get('/user-subscription/download-amneziawg', [UserSubscriptionController::class, 'downloadAmneziaWg'])
         ->name('user-subscription.download-amneziawg');

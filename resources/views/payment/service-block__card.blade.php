@@ -21,6 +21,10 @@
     $switchTargetMode = $userSub?->switchTargetVpnAccessMode();
     $switchTargetLabel = $switchTargetMode ? ($userSub?->vpnAccessModeCabinetLabelFor($switchTargetMode) ?? (\App\Models\Server::vpnAccessModeOptions()[$switchTargetMode] ?? null)) : null;
     $canSwitchVpnAccessMode = $userSub?->canSwitchVpnAccessMode() ?? false;
+    $canSwitchMtsBetaToEconomy = $userSub
+        && $userSub->isLocallyActive()
+        && !$userSub->hasPendingVpnAccessModeSwitch()
+        && trim((string) ($userSub->vpn_plan_code ?? '')) === \App\Services\VpnAgent\SubscriptionMtsBetaToEconomySwitcher::SOURCE_PLAN_CODE;
     $isLegacyVpnCard = $userSub
         ? trim((string) ($userSub->vpn_plan_code ?? '')) === ''
         : false;
@@ -381,6 +385,17 @@
             </a>
         @endif
 
+        @if ($canSwitchMtsBetaToEconomy && $userSub)
+            <a href="{{ route('user-subscription.switch-mts-beta-to-economy', ['user_subscription_id' => (int) $userSub->id]) }}"
+               class="js-sub-action service-block__action-btn service-block__action-btn--secondary"
+               data-action="switch-plan"
+               data-overlay-message="Готовим новый конфиг..."
+               data-confirm="Подключение будет переведено на тариф Эконом до конца текущего периода без доплаты. Понадобится новый конфиг, а старый MTS-конфиг перестанет работать."
+               title="Перейти на Эконом без доплаты до конца текущего периода">
+                Перейти на Эконом
+            </a>
+        @endif
+
         @if ($subInfo->isConnected() && !$subInfo->isExpired())
             <div id="instruction-modal-{{ $instructionTargetId }}" class="fixed inset-0 z-[9999] hidden overflow-y-auto" data-instruction-url="{{ $instructionUrl }}" data-instruction-loaded="0">
                 <div class="absolute inset-0 bg-black/50" onclick="closeInstructionModal({{ $instructionTargetId }})"></div>
@@ -402,6 +417,10 @@
         @if ($hasPendingVpnAccessModeSwitch && $pendingVpnAccessModeText)
             <div class="service-block__switch-pending">
                 {{ $pendingVpnAccessModeText }}
+            </div>
+        @elseif ($canSwitchMtsBetaToEconomy)
+            <div class="service-block__switch-hint">
+                Если связь через МТС перестала работать, можно перейти на Эконом без доплаты до конца текущего периода.
             </div>
         @elseif ($isLegacyVpnCard && $canSwitchVpnAccessMode && $subInfo->isConnected() && !$subInfo->isExpired())
             <div class="service-block__switch-hint">

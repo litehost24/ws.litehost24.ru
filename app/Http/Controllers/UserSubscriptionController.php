@@ -11,6 +11,7 @@ use App\Models\Subscription;
 use App\Models\UserSubscription;
 use App\Models\UserSubscriptionTopup;
 use App\Services\VpnAgent\SubscriptionArchiveBuilder;
+use App\Services\VpnAgent\SubscriptionMtsBetaToEconomySwitcher;
 use App\Services\VpnAgent\SubscriptionVpnAccessModeSwitcher;
 use App\Services\ReferralPricingService;
 use App\Services\VpnPlanCatalog;
@@ -846,6 +847,75 @@ class UserSubscriptionController extends Controller
         }
 
         $message = $this->vpnAccessModePreparedMessage($updated);
+
+        if ($request->expectsJson()) {
+            return $this->subscriptionCardJson($updated->subscription, $message, (int) $updated->id);
+        }
+
+        return redirect()->back()->with('subscription-success', $message);
+    }
+
+    public function switchMtsBetaToEconomy(
+        Request $request,
+        SubscriptionMtsBetaToEconomySwitcher $switcher
+    ): RedirectResponse|JsonResponse {
+        if (!in_array(Auth::user()->role, ['user', 'admin', 'partner'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Смена тарифа недоступна.'], 403, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Смена тарифа недоступна.');
+        }
+
+        $data = $request->validate([
+            'user_subscription_id' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $userSub = $this->findVisibleUserSubscription((int) $data['user_subscription_id']);
+        if (!$userSub) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Подписка не найдена.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Подписка не найдена.');
+        }
+
+        if (!$userSub->isLocallyActive()) {
+            $message = 'Перейти на Эконом можно только для активной подписки.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
+        if (trim((string) ($userSub->vpn_plan_code ?? '')) !== SubscriptionMtsBetaToEconomySwitcher::SOURCE_PLAN_CODE) {
+            $message = 'Переход на Эконом доступен только для тарифа Для сети МТС (бета).';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
+        try {
+            $updated = $switcher->switch($userSub);
+        } catch (\Throwable $e) {
+            \Log::error('Subscription MTS beta -> economy switch error: ' . $e->getMessage(), [
+                'user_id' => (int) Auth::id(),
+                'user_subscription_id' => (int) $userSub->id,
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Не удалось перевести тариф на Эконом'], 500, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Не удалось перевести тариф на Эконом');
+        }
+
+        $message = 'Тариф переключён на Эконом. Скачайте новый конфиг: старый конфиг для МТС больше не работает.';
 
         if ($request->expectsJson()) {
             return $this->subscriptionCardJson($updated->subscription, $message, (int) $updated->id);
