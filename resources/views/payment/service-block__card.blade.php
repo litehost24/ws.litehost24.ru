@@ -27,9 +27,7 @@
     $nextVpnPlanCode = trim((string) ($userSub->next_vpn_plan_code ?? ''));
     $nextVpnPlanLabel = $userSub?->nextVpnPlanLabel();
     $nextVpnPlanData = $nextVpnPlanCode !== '' ? app(\App\Services\VpnPlanCatalog::class)->find($nextVpnPlanCode) : null;
-    $nextVpnPlanNeedsNewConfig = $userSub && $nextVpnPlanData
-        ? $userSub->resolveVpnAccessMode() !== \App\Models\Server::normalizeVpnAccessMode((string) ($nextVpnPlanData['vpn_access_mode'] ?? ''))
-        : false;
+    $nextVpnPlanNeedsNewConfig = $userSub?->nextVpnPlanNeedsNewConfig() ?? false;
     $pendingVpnAccessModeDisconnectAt = $userSub?->pendingVpnAccessModeDisconnectAt();
     $hasPendingVpnAccessModeSwitch = $userSub?->hasPendingVpnAccessModeSwitch() ?? false;
     $pendingVpnAccessModeText = $pendingVpnAccessModeDisconnectAt
@@ -257,7 +255,7 @@
                     </div>
                     @if ($nextVpnPlanNeedsNewConfig)
                         <div class="service-block__legacy-plan-next">
-                            После продления понадобится новая инструкция и новый конфиг.
+                            После продления понадобится новая инструкция и новый конфиг. Старая настройка будет работать ещё {{ \App\Models\UserSubscription::NEXT_PLAN_CONFIG_GRACE_HOURS }} часа после продления.
                         </div>
                     @endif
                 @endif

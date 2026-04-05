@@ -6,6 +6,7 @@ use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Models\UserSubscription;
+use App\Models\ProjectSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -100,6 +101,57 @@ class UserSubscriptionScheduleNextPlanTest extends TestCase
         $response = $this->actingAs($user)->postJson(route('user-subscription.next-vpn-plan'), [
             'user_subscription_id' => $userSub->id,
             'vpn_plan_code' => 'regular_basic',
+        ]);
+
+        $response->assertOk();
+        $this->assertStringContainsString('В дату продления понадобится новая инструкция и новый конфиг.', (string) $response->json('message'));
+    }
+
+    public function test_scheduling_next_plan_on_another_white_ip_server_mentions_new_config_requirement(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+
+        $currentServer = Server::query()->create([
+            'ip1' => '84.23.55.167',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+        $targetServer = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        ProjectSetting::setValue(Server::CURRENT_WHITE_IP_SERVER_SETTING, (string) $targetServer->id);
+
+        $userSub = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 5000,
+            'action' => 'create',
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(20)->toDateString(),
+            'file_path' => 'files/' . $user->id . '_peerlegacyeconomy_' . $currentServer->id . '_31_03_2026_18_00.zip',
+            'server_id' => $currentServer->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'vpn_plan_code' => null,
+            'vpn_plan_name' => null,
+            'vpn_traffic_limit_bytes' => null,
+            'next_vpn_plan_code' => null,
+        ]);
+
+        $response = $this->actingAs($user)->postJson(route('user-subscription.next-vpn-plan'), [
+            'user_subscription_id' => $userSub->id,
+            'vpn_plan_code' => 'restricted_economy',
         ]);
 
         $response->assertOk();

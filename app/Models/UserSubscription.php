@@ -37,6 +37,8 @@ use App\Models\VpnPeerTrafficSnapshot;
  */
 class UserSubscription extends Model
 {
+    public const NEXT_PLAN_CONFIG_GRACE_HOURS = 24;
+
     use HasFactory;
 
     public const AWAIT_PAYMENT_DATE = '9999-01-01';
@@ -603,6 +605,39 @@ class UserSubscription extends Model
     public function nextVpnPlanLabel(): ?string
     {
         return $this->nextVpnPlan()['label'] ?? null;
+    }
+
+    public function vpnPlanNeedsNewConfig(?array $plan): bool
+    {
+        if ($plan === null) {
+            return false;
+        }
+
+        $targetMode = trim((string) ($plan['vpn_access_mode'] ?? ''));
+        if ($targetMode === '') {
+            return false;
+        }
+
+        $targetMode = Server::normalizeVpnAccessMode($targetMode);
+        $currentMode = $this->resolveVpnAccessMode();
+        if ($currentMode === null || $currentMode !== $targetMode) {
+            return true;
+        }
+
+        $currentServerId = $this->resolveServerId();
+        if ($currentServerId === null) {
+            return true;
+        }
+
+        $planCode = trim((string) ($plan['code'] ?? $plan['vpn_plan_code'] ?? ''));
+        $targetServer = Server::resolvePurchaseServer($targetMode, $planCode);
+
+        return $targetServer !== null && $currentServerId !== (int) $targetServer->id;
+    }
+
+    public function nextVpnPlanNeedsNewConfig(): bool
+    {
+        return $this->vpnPlanNeedsNewConfig($this->nextVpnPlan());
     }
 
     public function vpnTrafficLimitBytes(): ?int

@@ -125,7 +125,9 @@ class CheckSubscriptionExpiry extends Command
             $lines[] = $this->formatTelegramExpiryLine($subInfo);
 
             if (!empty($subInfo['needs_new_config'])) {
-                $lines[] = 'После продления понадобится новая инструкция и новый конфиг.';
+                $lines[] = 'После продления понадобится новая инструкция и новый конфиг. Старая настройка будет работать ещё '
+                    . UserSubscription::NEXT_PLAN_CONFIG_GRACE_HOURS
+                    . ' часа после продления.';
             }
         }
 
@@ -165,7 +167,7 @@ class CheckSubscriptionExpiry extends Command
             'days_until_expiry' => $daysUntilExpiry,
             'end_date' => $userSubscription->end_date,
             'next_plan_label' => $userSubscription->nextVpnPlanLabel(),
-            'needs_new_config' => $this->needsNewConfigForNextPlan($userSubscription),
+            'needs_new_config' => $userSubscription->nextVpnPlanNeedsNewConfig(),
         ];
 
         $isVpn = trim((string) $subscription->name) === 'VPN';
@@ -223,19 +225,6 @@ class CheckSubscriptionExpiry extends Command
         }
 
         return app(ReferralPricingService::class)->getFinalPriceCents($subscription, $user->referrer, $user, $basePrice);
-    }
-
-    private function needsNewConfigForNextPlan(UserSubscription $row): bool
-    {
-        $nextPlan = $row->nextVpnPlan();
-        if ($nextPlan === null) {
-            return false;
-        }
-
-        $currentMode = $row->resolveVpnAccessMode();
-        $nextMode = Server::normalizeVpnAccessMode((string) ($nextPlan['vpn_access_mode'] ?? ''));
-
-        return $currentMode !== null && $currentMode !== $nextMode;
     }
 
     /**

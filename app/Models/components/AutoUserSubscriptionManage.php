@@ -3,6 +3,7 @@
 namespace App\Models\components;
 
 use App\Mail\ForAdminMail;
+use App\Mail\VpnRenewalConfigChangeMail;
 use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\User;
@@ -183,6 +184,10 @@ class AutoUserSubscriptionManage
             'vpn_plan_name' => $renewalContext['plan_snapshot']['vpn_plan_name'] ?? null,
             'vpn_traffic_limit_bytes' => $renewalContext['plan_snapshot']['vpn_traffic_limit_bytes'] ?? null,
             'next_vpn_plan_code' => $renewalContext['carry_next_vpn_plan_code'],
+            'pending_vpn_access_mode_source_server_id' => $renewalContext['pending_source_server_id'],
+            'pending_vpn_access_mode_source_peer_name' => $renewalContext['pending_source_peer_name'],
+            'pending_vpn_access_mode_disconnect_at' => $renewalContext['pending_disconnect_at'],
+            'pending_vpn_access_mode_error' => null,
             'note' => $userSub->note ?? null,
         ]);
 
@@ -197,6 +202,10 @@ class AutoUserSubscriptionManage
 
         if ((bool) ($renewalContext['disable_previous'] ?? false)) {
             $this->disableExistingBundlePeer($userSub);
+        }
+
+        if ((bool) ($renewalContext['grace_previous_config'] ?? false)) {
+            $this->notifyRenewedVpnConfigChange($newSubscription, $renewalContext);
         }
 
         if ($subscription && $newSubscription && $referral) {
@@ -267,7 +276,7 @@ class AutoUserSubscriptionManage
         Log::info("Processing activation for await payment subscription ID: {$awaitSub->id}");
 
         $subscription = $subs->firstWhere('id', $awaitSub->subscription_id);
-        $renewalContext = $this->prepareRenewalContext($awaitSub, $subscription);
+        $renewalContext = $this->prepareRenewalContext($awaitSub, $subscription, false);
         $basePrice = $subscription
             ? $this->resolveBasePriceCentsFromPlanSnapshot($subscription, $renewalContext['plan_snapshot'])
             : (int) $awaitSub->price;
@@ -298,6 +307,10 @@ class AutoUserSubscriptionManage
             'vpn_plan_name' => $renewalContext['plan_snapshot']['vpn_plan_name'] ?? null,
             'vpn_traffic_limit_bytes' => $renewalContext['plan_snapshot']['vpn_traffic_limit_bytes'] ?? null,
             'next_vpn_plan_code' => $renewalContext['carry_next_vpn_plan_code'],
+            'pending_vpn_access_mode_source_server_id' => $renewalContext['pending_source_server_id'],
+            'pending_vpn_access_mode_source_peer_name' => $renewalContext['pending_source_peer_name'],
+            'pending_vpn_access_mode_disconnect_at' => $renewalContext['pending_disconnect_at'],
+            'pending_vpn_access_mode_error' => null,
             'note' => $awaitSub->note ?? null,
         ]);
 
@@ -540,7 +553,7 @@ class AutoUserSubscriptionManage
         return app(VpnPlanCatalog::class)->snapshot($nextPlanCode) ?? $currentSnapshot;
     }
 
-    private function prepareRenewalContext(object $userSub, ?Subscription $subscription): array
+    private function prepareRenewalContext(object $userSub, ?Subscription $subscription, bool $allowGracePeriod = true): array
     {
         $currentSnapshot = $this->currentPlanSnapshot($userSub);
         $planSnapshot = $this->resolveIntendedRenewalPlanSnapshot($subscription, $userSub);
@@ -561,6 +574,10 @@ class AutoUserSubscriptionManage
             'new_server' => null,
             'new_peer_name' => null,
             'disable_previous' => false,
+            'grace_previous_config' => false,
+            'pending_source_server_id' => null,
+            'pending_source_peer_name' => null,
+            'pending_disconnect_at' => null,
             'carry_next_vpn_plan_code' => null,
         ];
 
@@ -586,6 +603,17 @@ class AutoUserSubscriptionManage
             $context['new_server'] = $server;
             $context['new_peer_name'] = (string) ($package['email'] ?? '');
             $context['disable_previous'] = true;
+
+            if ($allowGracePeriod) {
+                [$sourceMeta, $sourceServer] = $this->resolveBundleServerTarget($userSub->file_path ?? null);
+                if ($sourceMeta && $sourceServer) {
+                    $context['disable_previous'] = false;
+                    $context['grace_previous_config'] = true;
+                    $context['pending_source_server_id'] = (int) $sourceServer->id;
+                    $context['pending_source_peer_name'] = $sourceMeta->peerName();
+                    $context['pending_disconnect_at'] = Carbon::now()->addHours(UserSubscription::NEXT_PLAN_CONFIG_GRACE_HOURS);
+                }
+            }
 
             return $context;
         } catch (\Throwable $e) {
@@ -684,6 +712,27 @@ class AutoUserSubscriptionManage
                 . ', server_id=' . (int) $server->id
                 . '. ' . $e->getMessage()
             );
+        }
+    }
+
+    private function notifyRenewedVpnConfigChange(UserSubscription $newSubscription, array $renewalContext): void
+    {
+        $recipient = trim((string) ($newSubscription->user?->email ?? ''));
+        $disconnectAt = $renewalContext['pending_disconnect_at'] ?? null;
+        if ($recipient === '' || !$disconnectAt instanceof Carbon) {
+            return;
+        }
+
+        try {
+            $newSubscription->loadMissing('user', 'subscription');
+
+            Mail::to($recipient)->send(new VpnRenewalConfigChangeMail($newSubscription, $disconnectAt));
+        } catch (\Throwable $e) {
+            Log::warning('VPN renewal config change mail failed', [
+                'user_id' => (int) ($newSubscription->user_id ?? 0),
+                'user_subscription_id' => (int) ($newSubscription->id ?? 0),
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

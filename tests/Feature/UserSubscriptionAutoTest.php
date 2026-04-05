@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\components\AutoUserSubscriptionManage;
+use App\Mail\VpnRenewalConfigChangeMail;
 use App\Models\Payment;
 use App\Models\ProjectSetting;
 use App\Models\Server;
@@ -11,6 +12,7 @@ use App\Models\User;
 use App\Models\UserSubscription;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class UserSubscriptionAutoTest extends TestCase
@@ -216,6 +218,76 @@ class UserSubscriptionAutoTest extends TestCase
         $this->assertSame('Стандарт', (string) $result->last()->vpn_plan_name);
         $this->assertSame(30 * 1024 * 1024 * 1024, (int) $result->last()->vpn_traffic_limit_bytes);
         $this->assertNull($result->last()->next_vpn_plan_code);
+    }
+
+    public function test_auto_rebilling_keeps_previous_config_for_day_when_next_plan_moves_to_another_server(): void
+    {
+        Mail::fake();
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+        $user = User::factory()->create([
+            'email' => 'grace-renew@test.local',
+        ]);
+        Payment::factory()->create([
+            'user_id' => $user->id,
+            'amount' => 50000,
+        ]);
+
+        $currentServer = Server::query()->create([
+            'ip1' => '84.23.55.167',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+        $targetServer = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        ProjectSetting::setValue(Server::CURRENT_WHITE_IP_SERVER_SETTING, (string) $targetServer->id);
+
+        $expiredDate = Carbon::today()->subDay()->toDateString();
+
+        UserSubscription::factory()->create([
+            'subscription_id' => $subscription->id,
+            'user_id' => $user->id,
+            'price' => 5000,
+            'end_date' => $expiredDate,
+            'is_processed' => true,
+            'file_path' => $this->bundlePath($user->id, 'legacy84peer', $currentServer->id),
+            'server_id' => $currentServer->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'vpn_plan_code' => null,
+            'vpn_plan_name' => null,
+            'vpn_traffic_limit_bytes' => null,
+            'next_vpn_plan_code' => 'restricted_economy',
+        ]);
+
+        Carbon::setTestNow(Carbon::create(2026, 4, 5, 10, 0, 0, 'Europe/Moscow'));
+        try {
+            (new AutoUserSubscriptionManage())->start();
+        } finally {
+            Carbon::setTestNow();
+        }
+
+        $result = UserSubscription::query()->orderBy('id')->get();
+
+        $this->assertCount(2, $result);
+        $renewed = $result->last();
+        $this->assertSame((int) $targetServer->id, (int) $renewed->server_id);
+        $this->assertSame('restricted_economy', (string) $renewed->vpn_plan_code);
+        $this->assertSame((int) $currentServer->id, (int) $renewed->pending_vpn_access_mode_source_server_id);
+        $this->assertSame('legacy84peer', (string) $renewed->pending_vpn_access_mode_source_peer_name);
+        $this->assertNotNull($renewed->pending_vpn_access_mode_disconnect_at);
+        $this->assertSame('2026-04-06 10:00:00', $renewed->pending_vpn_access_mode_disconnect_at?->timezone('Europe/Moscow')->format('Y-m-d H:i:s'));
+
+        Mail::assertSent(VpnRenewalConfigChangeMail::class, function (VpnRenewalConfigChangeMail $mail) use ($user, $renewed) {
+            return $mail->hasTo($user->email)
+                && (int) $mail->userSubscription->id === (int) $renewed->id;
+        });
     }
 
     public function test_auto_rebilling_keeps_plan_specific_server_override_for_current_plan(): void

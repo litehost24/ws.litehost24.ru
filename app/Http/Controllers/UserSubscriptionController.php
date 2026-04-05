@@ -999,10 +999,10 @@ class UserSubscriptionController extends Controller
             (string) ($plan['label'] ?? $planCode)
         );
 
-        $currentMode = $userSub->resolveVpnAccessMode();
-        $targetMode = Server::normalizeVpnAccessMode((string) ($plan['vpn_access_mode'] ?? ''));
-        if ($currentMode !== $targetMode) {
-            $message .= ' В дату продления понадобится новая инструкция и новый конфиг.';
+        if ($userSub->vpnPlanNeedsNewConfig($plan)) {
+            $message .= ' В дату продления понадобится новая инструкция и новый конфиг. Старая настройка будет работать ещё '
+                . UserSubscription::NEXT_PLAN_CONFIG_GRACE_HOURS
+                . ' часа после продления.';
         }
 
         return $message;
