@@ -24,6 +24,7 @@ return [
             'traffic_limit_bytes' => null,
             'traffic_label' => 'Без ограничений по трафику',
             'purchase_server_setting' => 'vpn_bundle_mts_beta_server_id',
+            'purchasable' => false,
         ],
         'restricted_economy' => [
             'label' => 'Эконом',

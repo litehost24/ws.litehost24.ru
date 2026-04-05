@@ -91,6 +91,9 @@ class TelegramSubscriptionService
 
             $catalog = app(VpnPlanCatalog::class);
             $planCode = $catalog->normalizePlanCode($planCode);
+            if (!$catalog->isPurchasable($planCode)) {
+                return ['ok' => false, 'message' => 'Тариф недоступен для новых подключений.'];
+            }
             $pricing = app(ReferralPricingService::class);
             $referrer = $user->referrer;
             $basePrice = $catalog->resolveBasePriceCents($sub, $planCode);

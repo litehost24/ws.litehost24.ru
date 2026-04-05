@@ -87,6 +87,7 @@ class VpnPlanCatalog
             'label' => (string) ($plan['label'] ?? $planCode),
             'short_label' => (string) ($plan['short_label'] ?? ($plan['label'] ?? $planCode)),
             'description' => (string) ($plan['description'] ?? ''),
+            'purchasable' => (bool) ($plan['purchasable'] ?? true),
             'traffic_label' => trim((string) ($plan['traffic_label'] ?? '')) !== ''
                 ? (string) $plan['traffic_label']
                 : null,
@@ -94,6 +95,13 @@ class VpnPlanCatalog
             'base_price_cents' => $basePriceCents,
             'traffic_limit_bytes' => $trafficLimitBytes,
         ];
+    }
+
+    public function isPurchasable(?string $planCode): bool
+    {
+        $plan = $this->find($planCode);
+
+        return $plan !== null && (bool) ($plan['purchasable'] ?? true);
     }
 
     public function resolveBasePriceCents(Subscription $subscription, ?string $planCode): int
@@ -121,7 +129,7 @@ class VpnPlanCatalog
 
         foreach ($this->all() as $code => $_plan) {
             $plan = $this->find((string) $code);
-            if ($plan === null) {
+            if ($plan === null || !(bool) ($plan['purchasable'] ?? true)) {
                 continue;
             }
 

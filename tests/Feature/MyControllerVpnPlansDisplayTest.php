@@ -71,7 +71,7 @@ class MyControllerVpnPlansDisplayTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Эконом', false);
-        $response->assertSee('Для сети МТС (бета)', false);
+        $response->assertDontSee('Для сети МТС (бета)', false);
         $response->assertSee('Стандарт', false);
         $response->assertSee('Премиум', false);
         $response->assertSee('Обычное подключение', false);
@@ -79,7 +79,7 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertSee('200 ₽/мес', false);
         $response->assertSee('300 ₽/мес', false);
         $response->assertSee('Без ограничений по трафику', false);
-        $response->assertSee('Для мобильной сети МТС.', false);
+        $response->assertDontSee('Для мобильной сети МТС.', false);
         $response->assertSee('пакет периода:', false);
         $response->assertSee('использовано:', false);
         $response->assertSee('осталось:', false);
@@ -136,7 +136,7 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertSee('Без выбора нового тарифа подписка остановится в дату окончания.', false);
         $response->assertSee('старый тариф действует до', false);
         $response->assertSee('🏠 Обычное подключение — 100 ₽/мес · Без ограничений по трафику', false);
-        $response->assertSee('📶 Для сети МТС (бета) — 100 ₽/мес · Без ограничений по трафику', false);
+        $response->assertDontSee('📶 Для сети МТС (бета) — 100 ₽/мес · Без ограничений по трафику', false);
         $response->assertSee('📶 Стандарт — 200 ₽/мес · 30 ГБ интернета', false);
         $response->assertDontSee('очередное списание', false);
         $response->assertDontSee('Отключить автопродление', false);

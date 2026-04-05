@@ -405,6 +405,13 @@ class UserSubscriptionController extends Controller
         $referral = Auth::user();
         $referrer = $referral?->referrer;
         $planCode = $this->resolveRequestedVpnPlanCode($request, $sub);
+        if (trim((string) $request->input('vpn_plan_code', '')) !== '' && $planCode === null) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Тариф недоступен для новых подключений.'], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Тариф недоступен для новых подключений.');
+        }
         $basePrice = $catalog->resolveBasePriceCents($sub, $planCode);
         $finalPrice = $pricing->getFinalPriceCents($sub, $referrer, $referral, $basePrice);
 
@@ -663,7 +670,7 @@ class UserSubscriptionController extends Controller
         $planCode = $catalog->normalizePlanCode((string) $data['vpn_plan_code']);
         $plan = $catalog->find($planCode);
 
-        if ($plan === null) {
+        if ($plan === null || !$catalog->isPurchasable($planCode)) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => 'Тариф не найден.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
             }
@@ -1044,7 +1051,11 @@ class UserSubscriptionController extends Controller
         $catalog = app(VpnPlanCatalog::class);
         $planCode = trim((string) $request->input('vpn_plan_code', ''));
         if ($planCode !== '') {
-            return $catalog->normalizePlanCode($planCode);
+            $planCode = $catalog->normalizePlanCode($planCode);
+
+            return $catalog->isPurchasable($planCode)
+                ? $planCode
+                : null;
         }
 
         if ($request->boolean('need_white_ip')) {

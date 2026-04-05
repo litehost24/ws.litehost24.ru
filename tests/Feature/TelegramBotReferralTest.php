@@ -398,8 +398,8 @@ class TelegramBotReferralTest extends TestCase
         $this->assertStringContainsString('Выберите тариф VPN:', $menuText);
         $this->assertStringContainsString('🏠 Обычное — 100 ₽/мес', $menuText);
         $this->assertStringContainsString('Для Wi‑Fi и проводного интернета.', $menuText);
-        $this->assertStringContainsString('📶 МТС — 100 ₽/мес', $menuText);
-        $this->assertStringContainsString('Для мобильной сети МТС.', $menuText);
+        $this->assertStringNotContainsString('📶 МТС — 100 ₽/мес', $menuText);
+        $this->assertStringNotContainsString('Для мобильной сети МТС.', $menuText);
         $this->assertStringContainsString('📶 Эконом — 100 ₽/мес', $menuText);
         $this->assertStringContainsString('Для мобильной связи.', $menuText);
         $this->assertStringContainsString('📶 Стандарт — 200 ₽/мес', $menuText);
@@ -408,7 +408,7 @@ class TelegramBotReferralTest extends TestCase
         $keyboard = collect($menuResponse->json('reply_markup.keyboard') ?? []);
         $buttonTexts = $keyboard->flatten(1)->pluck('text')->all();
         $this->assertContains('🏠 Обычное — 100 ₽/мес', $buttonTexts);
-        $this->assertContains('📶 МТС — 100 ₽/мес', $buttonTexts);
+        $this->assertNotContains('📶 МТС — 100 ₽/мес', $buttonTexts);
         $this->assertContains('📶 Эконом — 100 ₽/мес', $buttonTexts);
         $this->assertContains('📶 Стандарт — 200 ₽/мес', $buttonTexts);
         $this->assertContains('📶 Премиум — 300 ₽/мес', $buttonTexts);
