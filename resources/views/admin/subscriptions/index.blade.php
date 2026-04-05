@@ -346,8 +346,8 @@
                                             @endif
                                         </a>
                                     </th>
-                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider" title="Сумма total_bytes_delta по peer_name за все дни (Amnezia)">
-                                        Трафик (Amnezia)
+                                    <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider" title="Трафик конкретной записи подписки за её период">
+                                        Трафик за период
                                     </th>
                                     <th scope="col" class="px-2 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                                         <a href="{{ route('admin.subscriptions.index', array_merge(request()->query(), ['sort_by' => 'end_date', 'sort_order' => $sortBy === 'end_date' && $sortOrder === 'asc' ? 'desc' : 'asc'])) }}" class="hover:text-gray-700">
@@ -576,8 +576,11 @@
                                                 </span>
                                             @endif
                                         </td>
-                                        <td class="px-2 py-2 whitespace-nowrap" title="{{ $first->traffic_total_bytes === null ? '' : ((int) $first->traffic_total_bytes . ' B') }}">
-                                            {{ $formatBytes($first->traffic_total_bytes) }}
+                                        @php
+                                            $firstTrafficBytes = isset($first->traffic_display_bytes) ? (int) $first->traffic_display_bytes : $first->traffic_total_bytes;
+                                        @endphp
+                                        <td class="px-2 py-2 whitespace-nowrap" title="{{ $firstTrafficBytes === null ? '' : ((int) $firstTrafficBytes . ' B') }}">
+                                            {{ $formatBytes($firstTrafficBytes) }}
                                         </td>
                                         <td class="px-2 py-2 whitespace-nowrap">{{ \Carbon\Carbon::parse($first->end_date)->format('d.m.Y') }}</td>
                                         <td class="px-2 py-2 whitespace-nowrap">
@@ -738,8 +741,11 @@
                                                     <span>{{ $sub->subscription_id }}</span>
                                                 </span>
                                             </td>
-                                            <td class="px-2 py-2 whitespace-nowrap" title="{{ $sub->traffic_total_bytes === null ? '' : ((int) $sub->traffic_total_bytes . ' B') }}">
-                                                {{ $formatBytes($sub->traffic_total_bytes) }}
+                                            @php
+                                                $subTrafficBytes = isset($sub->traffic_display_bytes) ? (int) $sub->traffic_display_bytes : $sub->traffic_total_bytes;
+                                            @endphp
+                                            <td class="px-2 py-2 whitespace-nowrap" title="{{ $subTrafficBytes === null ? '' : ((int) $subTrafficBytes . ' B') }}">
+                                                {{ $formatBytes($subTrafficBytes) }}
                                             </td>
                                             <td class="px-2 py-2 whitespace-nowrap">{{ \Carbon\Carbon::parse($sub->end_date)->format('d.m.Y') }}</td>
                                             <td class="px-2 py-2 whitespace-nowrap">

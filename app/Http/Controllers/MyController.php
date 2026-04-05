@@ -41,6 +41,7 @@ class MyController extends Controller
             $subListForInfo = UserSubscription::getCabinetList($userId);
             UserSubscription::attachTrafficTotals($subListForInfo);
             UserSubscription::attachTrafficPeriodUsage($subListForInfo);
+            UserSubscription::attachTrafficDisplayUsage($subListForInfo);
 
             $subs = $subListForInfo
                 ->map(fn ($item) => $item->subscription)
@@ -65,6 +66,7 @@ class MyController extends Controller
             $subListForInfo = UserSubscription::getCabinetList((int) Auth::id());
             UserSubscription::attachTrafficTotals($subListForInfo);
             UserSubscription::attachTrafficPeriodUsage($subListForInfo);
+            UserSubscription::attachTrafficDisplayUsage($subListForInfo);
         }
         $userSubInfo = new UserSubscriptionInfo($subListForInfo);
         $latestBySub = UserSubscription::query()

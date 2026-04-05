@@ -311,6 +311,7 @@ class AdminSubscriptionController extends Controller
         }
 
         UserSubscription::attachTrafficTotals($latestUserSubscriptions);
+        UserSubscription::attachTrafficDisplayUsage($latestUserSubscriptions);
 
         $onlineByPeerKey = collect([]);
         $dualActiveByPeerKey = collect([]);

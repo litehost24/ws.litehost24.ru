@@ -460,6 +460,122 @@ class UserSubscription extends Model
         return $subscriptions;
     }
 
+    public static function attachTrafficDisplayUsage(Collection $subscriptions): Collection
+    {
+        if ($subscriptions->isEmpty()) {
+            return $subscriptions;
+        }
+
+        foreach ($subscriptions as $sub) {
+            $sub->traffic_display_bytes = null;
+        }
+
+        if (!Schema::hasTable('vpn_peer_traffic_daily')) {
+            return $subscriptions;
+        }
+
+        $items = $subscriptions->filter(fn ($sub) => $sub instanceof self)->values();
+        if ($items->isEmpty()) {
+            return $subscriptions;
+        }
+
+        $userIds = [];
+        $peerNames = [];
+        $minDate = null;
+        $maxDate = null;
+        $meta = [];
+
+        foreach ($items as $sub) {
+            $userId = (int) ($sub->user_id ?? 0);
+            $peerName = VpnPeerName::fromSubscription($sub);
+            $startDate = $sub->created_at instanceof Carbon
+                ? $sub->created_at->copy()->startOfDay()->toDateString()
+                : Carbon::today()->toDateString();
+
+            try {
+                $endDateCarbon = Carbon::parse((string) ($sub->end_date ?? Carbon::today()->toDateString()));
+            } catch (\Throwable) {
+                $endDateCarbon = Carbon::today();
+            }
+
+            $endDate = $endDateCarbon->copy()->startOfDay()->toDateString();
+            $today = Carbon::today()->toDateString();
+            if ($endDate > $today) {
+                $endDate = $today;
+            }
+            if ($endDate < $startDate) {
+                $endDate = $startDate;
+            }
+
+            if ($userId > 0) {
+                $userIds[$userId] = $userId;
+            }
+            if ($peerName !== null && $peerName !== '') {
+                $peerNames[$peerName] = $peerName;
+            }
+
+            $meta[(int) $sub->id] = [
+                'user_id' => $userId,
+                'peer_name' => $peerName,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+            ];
+
+            if ($minDate === null || $startDate < $minDate) {
+                $minDate = $startDate;
+            }
+            if ($maxDate === null || $endDate > $maxDate) {
+                $maxDate = $endDate;
+            }
+        }
+
+        if (empty($userIds) || empty($peerNames) || $minDate === null || $maxDate === null) {
+            return $subscriptions;
+        }
+
+        $daily = VpnPeerTrafficDaily::query()
+            ->select('user_id', 'peer_name', 'date', DB::raw('SUM(total_bytes_delta) as total_bytes'))
+            ->whereIn('user_id', array_values($userIds))
+            ->whereIn('peer_name', array_values($peerNames))
+            ->whereDate('date', '>=', $minDate)
+            ->whereDate('date', '<=', $maxDate)
+            ->groupBy('user_id', 'peer_name', 'date')
+            ->orderBy('date')
+            ->get();
+
+        $dailyByUserPeer = [];
+        foreach ($daily as $row) {
+            $dailyByUserPeer[(int) $row->user_id . ':' . (string) $row->peer_name][] = [
+                'date' => (string) $row->date,
+                'bytes' => (int) $row->total_bytes,
+            ];
+        }
+
+        foreach ($subscriptions as $sub) {
+            $info = $meta[(int) ($sub->id ?? 0)] ?? null;
+            if (!$info || empty($info['user_id']) || empty($info['peer_name'])) {
+                continue;
+            }
+
+            $displayBytes = 0;
+            $rows = $dailyByUserPeer[$info['user_id'] . ':' . $info['peer_name']] ?? [];
+            foreach ($rows as $row) {
+                if ((string) $row['date'] < (string) $info['start_date']) {
+                    continue;
+                }
+                if ((string) $row['date'] > (string) $info['end_date']) {
+                    continue;
+                }
+
+                $displayBytes += (int) ($row['bytes'] ?? 0);
+            }
+
+            $sub->traffic_display_bytes = $displayBytes;
+        }
+
+        return $subscriptions;
+    }
+
     public static function nextMonthlyEndDate(?string $previousEndDate): string
     {
         $fallbackBase = Carbon::today()->startOfDay();

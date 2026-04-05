@@ -86,13 +86,12 @@
 
         $isBlocked = $isAwaitingPayment || $subInfo->isExpired();
         $isSoon = $subInfo->isExpiringSoon(7);
-        $trafficTotalBytes = isset($userSub?->traffic_total_bytes) ? (int) $userSub->traffic_total_bytes : null;
         $trafficPeriodBytes = isset($userSub?->traffic_period_bytes) ? (int) $userSub->traffic_period_bytes : null;
+        $trafficDisplayBytes = isset($userSub?->traffic_display_bytes) ? (int) $userSub->traffic_display_bytes : null;
         $trafficTopupBytes = isset($userSub?->traffic_topup_bytes) ? (int) $userSub->traffic_topup_bytes : 0;
         $trafficAvailableBytes = isset($userSub?->traffic_available_bytes) ? (int) $userSub->traffic_available_bytes : null;
         $trafficRemainingBytes = isset($userSub?->traffic_remaining_bytes) ? (int) $userSub->traffic_remaining_bytes : null;
         $trafficLimitBytes = $userSub?->vpnTrafficLimitBytes();
-        $trafficDisplayBytes = $trafficPeriodBytes ?? $trafficTotalBytes;
         $showStandaloneTraffic = $trafficLimitBytes === null && $trafficDisplayBytes !== null;
         $showTopupSection = $userSub && $userSub->isLocallyActive() && $trafficLimitBytes !== null && !empty($topupOptions);
         $topupExpiresAt = null;
