@@ -142,6 +142,84 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertDontSee('Включить автопродление', false);
     }
 
+    public function test_unlimited_vpn_card_shows_current_period_traffic_only(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+        $server = Server::query()->create([
+            'ip1' => '84.23.55.167',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 10000,
+            'action' => 'activate',
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => Carbon::today()->addDays(20)->toDateString(),
+            'created_at' => Carbon::today()->subDay(),
+            'updated_at' => Carbon::today()->subDay(),
+            'file_path' => 'files/' . $user->id . '_peermts_' . $server->id . '_31_03_2026_18_00.zip',
+            'server_id' => $server->id,
+            'vpn_access_mode' => 'white_ip',
+            'vpn_plan_code' => 'restricted_mts_beta',
+            'vpn_plan_name' => 'Для сети МТС (бета)',
+            'vpn_traffic_limit_bytes' => null,
+        ]);
+
+        DB::table('vpn_peer_traffic_daily')->insert([
+            [
+                'date' => Carbon::today()->subDays(2)->toDateString(),
+                'server_id' => $server->id,
+                'user_id' => $user->id,
+                'peer_name' => 'peermts',
+                'public_key' => 'pk-peermts',
+                'ip' => '10.66.66.6/32',
+                'rx_bytes_delta' => 0,
+                'tx_bytes_delta' => 0,
+                'total_bytes_delta' => 5 * 1024 * 1024 * 1024,
+                'vless_rx_bytes_delta' => 0,
+                'vless_tx_bytes_delta' => 0,
+                'vless_total_bytes_delta' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'date' => Carbon::today()->subDay()->toDateString(),
+                'server_id' => $server->id,
+                'user_id' => $user->id,
+                'peer_name' => 'peermts',
+                'public_key' => 'pk-peermts',
+                'ip' => '10.66.66.6/32',
+                'rx_bytes_delta' => 0,
+                'tx_bytes_delta' => 0,
+                'total_bytes_delta' => 3 * 1024 * 1024 * 1024,
+                'vless_rx_bytes_delta' => 0,
+                'vless_tx_bytes_delta' => 0,
+                'vless_total_bytes_delta' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->get(route('my.main'));
+
+        $response->assertOk();
+        $response->assertSee('трафик за период: 3.00 ГБ', false);
+        $response->assertDontSee('трафик Amnezia:', false);
+        $response->assertDontSee('8.00 ГБ', false);
+    }
+
     public function test_legacy_card_shows_selected_next_plan_hint_and_cancel_action(): void
     {
         $user = User::factory()->create([

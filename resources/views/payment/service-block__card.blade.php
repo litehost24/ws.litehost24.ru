@@ -87,12 +87,13 @@
         $isBlocked = $isAwaitingPayment || $subInfo->isExpired();
         $isSoon = $subInfo->isExpiringSoon(7);
         $trafficTotalBytes = isset($userSub?->traffic_total_bytes) ? (int) $userSub->traffic_total_bytes : null;
-        $trafficGb = $trafficTotalBytes !== null ? ($trafficTotalBytes / 1073741824) : null;
         $trafficPeriodBytes = isset($userSub?->traffic_period_bytes) ? (int) $userSub->traffic_period_bytes : null;
         $trafficTopupBytes = isset($userSub?->traffic_topup_bytes) ? (int) $userSub->traffic_topup_bytes : 0;
         $trafficAvailableBytes = isset($userSub?->traffic_available_bytes) ? (int) $userSub->traffic_available_bytes : null;
         $trafficRemainingBytes = isset($userSub?->traffic_remaining_bytes) ? (int) $userSub->traffic_remaining_bytes : null;
         $trafficLimitBytes = $userSub?->vpnTrafficLimitBytes();
+        $trafficDisplayBytes = $trafficPeriodBytes ?? $trafficTotalBytes;
+        $showStandaloneTraffic = $trafficLimitBytes === null && $trafficDisplayBytes !== null;
         $showTopupSection = $userSub && $userSub->isLocallyActive() && $trafficLimitBytes !== null && !empty($topupOptions);
         $topupExpiresAt = null;
         if ($showTopupSection) {
@@ -207,9 +208,9 @@
                     подписка истекает {{ $subInfo->getEndDate() }}
                 </span>
             @endif
-            @if ($trafficGb !== null)
+            @if ($showStandaloneTraffic)
                 <span class="text-gray-600 service-block__status service-block__status--traffic block">
-                    трафик Amnezia: {{ number_format($trafficGb, 2, '.', ' ') }} ГБ
+                    трафик за период: {{ $formatTrafficGb($trafficDisplayBytes) }}
                 </span>
             @endif
             @if ($trafficLimitBytes !== null && $trafficPeriodBytes !== null)
