@@ -7,6 +7,7 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Models\UserSubscription;
 use App\Models\ProjectSetting;
+use App\Models\Payment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -342,6 +343,71 @@ class UserSubscriptionScheduleNextPlanTest extends TestCase
             'id' => $userSub->id,
             'next_vpn_plan_code' => 'restricted_standard',
             'is_rebilling' => true,
+        ]);
+    }
+
+    public function test_expired_legacy_subscription_activates_immediately_after_plan_choice_when_balance_is_enough(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+
+        $server = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        Payment::factory()->create([
+            'user_id' => $user->id,
+            'amount' => 50000,
+        ]);
+
+        $legacy = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 5000,
+            'action' => 'deactivate',
+            'is_processed' => false,
+            'is_rebilling' => false,
+            'end_date' => Carbon::today()->subDay()->toDateString(),
+            'file_path' => 'files/' . $user->id . '_peerlegacyexpirednow_' . $server->id . '_31_03_2026_18_00.zip',
+            'server_id' => $server->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'vpn_plan_code' => null,
+            'vpn_plan_name' => null,
+            'vpn_traffic_limit_bytes' => null,
+            'next_vpn_plan_code' => null,
+            'note' => 'Телефон',
+        ]);
+
+        $response = $this->actingAs($user)->post(route('user-subscription.next-vpn-plan'), [
+            'user_subscription_id' => $legacy->id,
+            'vpn_plan_code' => 'restricted_standard',
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('subscription-success', 'Новый тариф подключен.');
+
+        $this->assertDatabaseHas('user_subscriptions', [
+            'id' => $legacy->id,
+            'next_vpn_plan_code' => null,
+            'is_rebilling' => false,
+        ]);
+
+        $this->assertDatabaseHas('user_subscriptions', [
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'action' => 'create',
+            'vpn_plan_code' => 'restricted_standard',
+            'vpn_plan_name' => 'Стандарт',
+            'note' => 'Телефон',
         ]);
     }
 }
