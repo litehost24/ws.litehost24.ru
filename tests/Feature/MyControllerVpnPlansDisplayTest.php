@@ -267,4 +267,49 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertSee('После продления понадобится новая инструкция и новый конфиг.', false);
         $response->assertSee('Отменить выбранный тариф', false);
     }
+
+    public function test_expired_legacy_card_still_shows_next_plan_selector(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email_verified_at' => now(),
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+        $server = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 5000,
+            'action' => 'deactivate',
+            'is_processed' => false,
+            'is_rebilling' => false,
+            'end_date' => Carbon::today()->subDay()->toDateString(),
+            'created_at' => Carbon::today()->subDays(30),
+            'updated_at' => Carbon::today()->subDay(),
+            'file_path' => 'files/' . $user->id . '_peerlegacyexpired_' . $server->id . '_31_03_2026_18_00.zip',
+            'server_id' => $server->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'vpn_plan_code' => null,
+            'vpn_plan_name' => null,
+            'vpn_traffic_limit_bytes' => null,
+            'next_vpn_plan_code' => null,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('my.main'));
+
+        $response->assertOk();
+        $response->assertSee('Выбрать новый тариф со следующего периода', false);
+        $response->assertSee('Старая подписка уже закончилась. Выберите новый тариф, чтобы продолжить подключение на следующем периоде.', false);
+        $response->assertSee('🏠 Обычное подключение — 100 ₽/мес · Без ограничений по трафику', false);
+        $response->assertSee('📶 Стандарт — 200 ₽/мес · 30 ГБ интернета', false);
+    }
 }

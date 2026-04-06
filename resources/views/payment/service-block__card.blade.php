@@ -61,8 +61,6 @@
         && $isLegacyVpnCard
         && $sub
         && trim((string) ($sub->name ?? '')) === 'VPN'
-        && $subInfo->isConnected()
-        && !$subInfo->isExpired()
     ) {
         $legacyNextPlanOptions = app(\App\Services\VpnPlanCatalog::class)->purchaseOptions(
             $sub,
@@ -270,7 +268,11 @@
                 </summary>
                 <div class="service-block__legacy-plan-body">
                 <div class="service-block__legacy-plan-hint">
+                    @if ($subInfo->isExpired())
+                        Старая подписка уже закончилась. Выберите новый тариф, чтобы продолжить подключение на следующем периоде.
+                    @else
                         Текущий тариф продолжит работать до конца оплаченного периода. Без выбора нового тарифа подписка остановится в дату окончания.
+                    @endif
                 </div>
                     <form method="POST" action="{{ route('user-subscription.next-vpn-plan') }}" class="service-block__legacy-plan-form">
                         @csrf

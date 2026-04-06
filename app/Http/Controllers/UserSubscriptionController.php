@@ -646,16 +646,6 @@ class UserSubscriptionController extends Controller
             return redirect()->back()->with('subscription-error', $message);
         }
 
-        if (!$userSub->isLocallyActive()) {
-            $message = 'Выбрать новый тариф можно только для активной подписки.';
-
-            if ($request->expectsJson()) {
-                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
-            }
-
-            return redirect()->back()->with('subscription-error', $message);
-        }
-
         if (!$userSub->isLegacyVpnPlan()) {
             $message = 'Для нового тарифа выбор на следующий период не требуется.';
 
