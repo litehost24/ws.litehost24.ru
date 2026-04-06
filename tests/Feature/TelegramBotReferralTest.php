@@ -400,6 +400,8 @@ class TelegramBotReferralTest extends TestCase
         $this->assertStringContainsString('Без ограничений по трафику. Для Wi‑Fi и проводного интернета.', $menuText);
         $this->assertStringNotContainsString('📶 МТС — 100 ₽/мес', $menuText);
         $this->assertStringNotContainsString('Для мобильной сети МТС.', $menuText);
+        $this->assertStringContainsString('📶 Мини — 60 ₽/мес', $menuText);
+        $this->assertStringContainsString('5 ГБ интернета. Для мобильной связи.', $menuText);
         $this->assertStringContainsString('📶 Эконом — 100 ₽/мес', $menuText);
         $this->assertStringContainsString('10 ГБ интернета. Для мобильной связи.', $menuText);
         $this->assertStringContainsString('📶 Стандарт — 200 ₽/мес', $menuText);
@@ -411,6 +413,7 @@ class TelegramBotReferralTest extends TestCase
         $buttonTexts = $keyboard->flatten(1)->pluck('text')->all();
         $this->assertContains('🏠 Обычное — 100 ₽/мес', $buttonTexts);
         $this->assertNotContains('📶 МТС — 100 ₽/мес', $buttonTexts);
+        $this->assertContains('📶 Мини — 60 ₽/мес', $buttonTexts);
         $this->assertContains('📶 Эконом — 100 ₽/мес', $buttonTexts);
         $this->assertContains('📶 Стандарт — 200 ₽/мес', $buttonTexts);
         $this->assertContains('📶 Премиум — 300 ₽/мес', $buttonTexts);

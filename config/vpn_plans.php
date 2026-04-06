@@ -26,6 +26,15 @@ return [
             'purchase_server_setting' => 'vpn_bundle_mts_beta_server_id',
             'purchasable' => false,
         ],
+        'restricted_mini' => [
+            'label' => 'Мини',
+            'short_label' => 'Мини',
+            'description' => 'Для мобильной связи.',
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'base_price_cents' => 6000,
+            'traffic_limit_bytes' => 5 * 1024 * 1024 * 1024,
+            'traffic_label' => '5 ГБ интернета',
+        ],
         'restricted_economy' => [
             'label' => 'Эконом',
             'short_label' => 'Эконом',
