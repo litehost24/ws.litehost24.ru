@@ -12,10 +12,12 @@ use App\Models\UserSubscription;
 use App\Models\UserSubscriptionTopup;
 use App\Services\VpnAgent\SubscriptionArchiveBuilder;
 use App\Services\VpnAgent\SubscriptionMtsBetaToEconomySwitcher;
+use App\Services\VpnAgent\SubscriptionPeerOperator;
 use App\Services\VpnAgent\SubscriptionVpnAccessModeSwitcher;
 use App\Services\ReferralPricingService;
 use App\Services\VpnPlanCatalog;
 use App\Services\VpnTopupCatalog;
+use App\Support\SubscriptionBundleMeta;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Http\RedirectResponse;
@@ -1004,6 +1006,72 @@ class UserSubscriptionController extends Controller
         return redirect()->back()->with('subscription-success', $message);
     }
 
+    public function destroy(Request $request): RedirectResponse|JsonResponse
+    {
+        if (!in_array(Auth::user()->role, ['user', 'admin', 'partner'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Удаление подписки недоступно.'], 403, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Удаление подписки недоступно.');
+        }
+
+        $data = $request->validate([
+            'user_subscription_id' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $userSub = UserSubscription::query()
+            ->where('user_id', (int) Auth::id())
+            ->where('id', (int) $data['user_subscription_id'])
+            ->with('subscription')
+            ->first();
+
+        if (!$userSub) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Подписка не найдена.'], 404, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', 'Подписка не найдена.');
+        }
+
+        $eligibility = $userSub->userDeleteEligibility();
+        if (!(bool) ($eligibility['allowed'] ?? false)) {
+            $message = (string) ($eligibility['reason'] ?? 'Удаление этой подписки запрещено.');
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
+        [$ok, $error] = $this->disableSubscriptionOnServer($userSub);
+        if (!$ok) {
+            $message = 'Не удалось остановить подписку на сервере: ' . $error;
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 500, [], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+
+            return redirect()->back()->with('subscription-error', $message);
+        }
+
+        $userSub->delete();
+
+        $message = 'Подписка удалена. Деньги возвращены на баланс.';
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'cards_html' => $this->renderSubscriptionRows(),
+                'balance_rub' => (new Balance)->getBalanceRub(),
+                'next_vpn_price_rub' => $this->getNextVpnPriceRub(),
+            ], 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        return redirect()->back()->with('subscription-success', $message);
+    }
+
     private function subscriptionCardJson(?Subscription $sub, string $message, ?int $userSubscriptionId = null): JsonResponse
     {
         if (!$sub) {
@@ -1063,6 +1131,7 @@ class UserSubscriptionController extends Controller
         $subListForInfo = UserSubscription::getCabinetList((int) Auth::id());
         UserSubscription::attachTrafficTotals($subListForInfo);
         UserSubscription::attachTrafficPeriodUsage($subListForInfo);
+        UserSubscription::attachTrafficDisplayUsage($subListForInfo);
         $displayUserSub = $subListForInfo->firstWhere('id', (int) $userSub->id);
         if (!$displayUserSub) {
             $displayUserSub = $subListForInfo->firstWhere('subscription_id', (int) $userSub->subscription_id);
@@ -1089,6 +1158,7 @@ class UserSubscriptionController extends Controller
         $subListForInfo = UserSubscription::getCabinetList((int) Auth::id());
         UserSubscription::attachTrafficTotals($subListForInfo);
         UserSubscription::attachTrafficPeriodUsage($subListForInfo);
+        UserSubscription::attachTrafficDisplayUsage($subListForInfo);
 
         return view('payment.service-block__rows', [
             'cards' => $subListForInfo,
@@ -1186,5 +1256,47 @@ class UserSubscriptionController extends Controller
             'Новое подключение уже подготовлено. Старая настройка отключится автоматически в %s МСК.',
             $disconnectAt->copy()->timezone('Europe/Moscow')->format('H:i')
         );
+    }
+
+    private function disableSubscriptionOnServer(UserSubscription $userSub): array
+    {
+        $path = trim((string) ($userSub->file_path ?? ''));
+        if ($path === '') {
+            return [false, 'file_path пуст'];
+        }
+
+        $meta = SubscriptionBundleMeta::fromFilePath($path);
+        if ($meta === null) {
+            return [false, 'Не удалось определить peer/server_id из file_path'];
+        }
+
+        $server = Server::query()->find($meta->serverId());
+        if (!$server) {
+            return [false, 'Сервер не найден'];
+        }
+
+        $peerOperator = app(SubscriptionPeerOperator::class);
+
+        if ($server->usesNode1Api()) {
+            try {
+                $peerOperator->disableNodePeer($server, $meta->peerName(), true);
+                $peerOperator->syncServerState($server, $meta->peerName(), 'disabled', (int) $userSub->user_id);
+            } catch (\Throwable $e) {
+                return [false, $e->getMessage()];
+            }
+        } else {
+            try {
+                $peerOperator->disableInboundPeer($server, $meta->peerName());
+                $peerOperator->syncServerState($server, $meta->peerName(), 'disabled', (int) $userSub->user_id);
+            } catch (\Throwable $e) {
+                if ($e->getMessage() === 'unsuccessful response') {
+                    return [false, 'Не удалось отключить inbound'];
+                }
+
+                return [false, 'Ошибка отключения inbound: ' . $e->getMessage()];
+            }
+        }
+
+        return [true, null];
     }
 }

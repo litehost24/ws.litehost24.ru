@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use App\Models\VpnPeerTrafficSnapshot;
+use App\Models\ReferralEarning;
 
 /**
  * @property integer $id
@@ -845,6 +846,73 @@ class UserSubscription extends Model
         return $this->resolveServerId() !== null
             && $targetMode !== null
             && $this->canSwitchToVpnAccessMode($targetMode);
+    }
+
+    public function userDeleteEligibility(): array
+    {
+        $pairStat = self::query()
+            ->select(DB::raw('COUNT(*) as history_count'), DB::raw('MAX(id) as latest_id'))
+            ->where('user_id', (int) $this->user_id)
+            ->where('subscription_id', (int) $this->subscription_id)
+            ->first();
+
+        if (!$pairStat) {
+            return ['allowed' => false, 'reason' => 'Не найдена история подписки.'];
+        }
+
+        if ((int) ($pairStat->latest_id ?? 0) !== (int) $this->id) {
+            return ['allowed' => false, 'reason' => 'Удалять можно только последнюю запись по подписке.'];
+        }
+
+        if ((int) ($pairStat->history_count ?? 0) !== 1) {
+            return ['allowed' => false, 'reason' => 'Удаление доступно только для ошибочно заведённой подписки без истории списаний и операций.'];
+        }
+
+        if ((string) ($this->action ?? '') !== 'create') {
+            return ['allowed' => false, 'reason' => 'Удалять можно только исходно заведённую подписку.'];
+        }
+
+        if (trim((string) ($this->file_path ?? '')) === '' || SubscriptionBundleMeta::fromFilePath((string) ($this->file_path ?? '')) === null) {
+            return ['allowed' => false, 'reason' => 'Удаление недоступно: не удалось определить конфиг подписки.'];
+        }
+
+        if (Schema::hasTable('user_subscription_topups')
+            && UserSubscriptionTopup::query()->where('user_subscription_id', (int) $this->id)->exists()
+        ) {
+            return ['allowed' => false, 'reason' => 'Удаление недоступно: по подписке уже были докупки трафика.'];
+        }
+
+        if (ReferralEarning::query()->where('user_subscription_id', (int) $this->id)->exists()) {
+            return ['allowed' => false, 'reason' => 'Удаление недоступно: по подписке уже было дилерское начисление.'];
+        }
+
+        $trafficBytes = null;
+        if (isset($this->traffic_display_bytes)) {
+            $trafficBytes = (int) $this->traffic_display_bytes;
+        } elseif (isset($this->traffic_period_bytes)) {
+            $trafficBytes = (int) $this->traffic_period_bytes;
+        }
+
+        if ($trafficBytes === null && Schema::hasTable('vpn_peer_traffic_daily')) {
+            $peerName = VpnPeerName::fromSubscription($this);
+            if ($peerName !== null && $peerName !== '') {
+                $trafficBytes = (int) VpnPeerTrafficDaily::query()
+                    ->where('user_id', (int) $this->user_id)
+                    ->where('peer_name', $peerName)
+                    ->sum('total_bytes_delta');
+            }
+        }
+
+        if ((int) ($trafficBytes ?? 0) > 0) {
+            return ['allowed' => false, 'reason' => 'Удаление недоступно: по подписке уже был трафик.'];
+        }
+
+        return ['allowed' => true, 'reason' => null];
+    }
+
+    public function canUserDelete(): bool
+    {
+        return (bool) ($this->userDeleteEligibility()['allowed'] ?? false);
     }
 
     private static function shiftMonthlyWithAnchor(Carbon $base): string

@@ -69,6 +69,7 @@
         );
         $showLegacyNextPlanSection = !empty($legacyNextPlanOptions);
     }
+    $canUserDeleteSubscription = $userSub?->canUserDelete() ?? false;
 @endphp
 <div
     class="service-block__card {{ $subInfo->isConnected() ? '--active' : '' }}"
@@ -396,6 +397,18 @@
                title="Перейти на Эконом без доплаты до конца текущего периода">
                 Перейти на Эконом
             </a>
+        @endif
+
+        @if ($canUserDeleteSubscription && $userSub)
+            <form method="POST" action="{{ route('user-subscription.delete') }}" class="inline-block">
+                @csrf
+                <input type="hidden" name="user_subscription_id" value="{{ (int) $userSub->id }}">
+                <button type="submit"
+                        class="service-block__action-btn service-block__action-btn--danger"
+                        data-confirm="Подписка будет удалена, а деньги вернутся на баланс. Это доступно только если по подписке ещё не было трафика, докупок и дилерских начислений.">
+                    Удалить подписку
+                </button>
+            </form>
         @endif
 
         @if ($subInfo->isConnected() && !$subInfo->isExpired())

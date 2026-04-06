@@ -100,6 +100,7 @@ Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified']
     Route::post('/user-subscription/next-vpn-plan', [UserSubscriptionController::class, 'scheduleNextVpnPlan'])->name('user-subscription.next-vpn-plan');
     Route::post('/user-subscription/next-vpn-plan/clear', [UserSubscriptionController::class, 'clearNextVpnPlan'])->name('user-subscription.clear-next-vpn-plan');
     Route::post('/user-subscription/topup', [UserSubscriptionController::class, 'purchaseTopup'])->name('user-subscription.topup');
+    Route::post('/user-subscription/delete', [UserSubscriptionController::class, 'destroy'])->name('user-subscription.delete');
     Route::post('/user-subscription/update-note', [UserSubscriptionController::class, 'updateNote'])->name('user-subscription.update-note');
     Route::get('/user-subscriptions-manage', [UserSubscriptionController::class, 'manage'])->name('user-subscriptions-manage');
     Route::post('/user-subscription/mark-as-done', [UserSubscriptionController::class, 'markAsDone']);
