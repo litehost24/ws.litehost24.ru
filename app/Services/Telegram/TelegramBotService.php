@@ -684,10 +684,10 @@ class TelegramBotService
                 'button_text' => $buttonText,
                 'label_line' => $buttonText . ' · ' . $suffix,
                 'description_line' => trim((string) ($plan['description'] ?? '')) !== ''
-                    ? (string) $plan['description']
-                    : ($mode === \App\Models\Server::VPN_ACCESS_REGULAR
+                    ? $suffix . '. ' . (string) $plan['description']
+                    : ($suffix . '. ' . ($mode === \App\Models\Server::VPN_ACCESS_REGULAR
                         ? 'Для Wi‑Fi и проводного интернета.'
-                        : 'Для мобильной связи.'),
+                        : 'Для мобильной связи.')),
             ];
         }
 
