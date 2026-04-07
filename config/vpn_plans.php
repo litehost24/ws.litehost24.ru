@@ -61,7 +61,6 @@ return [
             'base_price_cents' => 30000,
             'traffic_limit_bytes' => 50 * 1024 * 1024 * 1024,
             'traffic_label' => '50 ГБ интернета',
-            'purchase_server_setting' => 'vpn_bundle_premium_server_id',
         ],
     ],
 ];
