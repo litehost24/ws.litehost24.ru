@@ -346,7 +346,7 @@ class UserSubscriptionScheduleNextPlanTest extends TestCase
         ]);
     }
 
-    public function test_expired_legacy_subscription_activates_immediately_after_plan_choice_when_balance_is_enough(): void
+    public function test_expired_legacy_subscription_only_saves_next_plan_choice_even_when_balance_is_enough(): void
     {
         $user = User::factory()->create([
             'role' => 'user',
@@ -393,21 +393,14 @@ class UserSubscriptionScheduleNextPlanTest extends TestCase
         ]);
 
         $response->assertRedirect();
-        $response->assertSessionHas('subscription-success', 'Новый тариф подключен.');
+        $response->assertSessionHas('subscription-success');
 
         $this->assertDatabaseHas('user_subscriptions', [
             'id' => $legacy->id,
-            'next_vpn_plan_code' => null,
-            'is_rebilling' => false,
+            'next_vpn_plan_code' => 'restricted_standard',
+            'is_rebilling' => true,
         ]);
 
-        $this->assertDatabaseHas('user_subscriptions', [
-            'user_id' => $user->id,
-            'subscription_id' => $subscription->id,
-            'action' => 'create',
-            'vpn_plan_code' => 'restricted_standard',
-            'vpn_plan_name' => 'Стандарт',
-            'note' => 'Телефон',
-        ]);
+        $this->assertSame(1, UserSubscription::query()->where('user_id', $user->id)->count());
     }
 }

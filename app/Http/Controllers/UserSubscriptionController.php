@@ -675,13 +675,6 @@ class UserSubscriptionController extends Controller
             'is_rebilling' => true,
         ]);
 
-        if ($this->shouldActivateExpiredLegacyImmediately($userSub)) {
-            $activationResult = $this->activateExpiredLegacyImmediately($userSub, $subscription, $planCode, $request);
-            if ($activationResult !== null) {
-                return $activationResult;
-            }
-        }
-
         $message = $this->scheduledNextPlanMessage($userSub, $planCode, $plan);
 
         if ($request->expectsJson()) {
@@ -689,82 +682,6 @@ class UserSubscriptionController extends Controller
         }
 
         return redirect()->back()->with('subscription-success', $message);
-    }
-
-    private function shouldActivateExpiredLegacyImmediately(UserSubscription $userSub): bool
-    {
-        if (!$userSub->isLegacyVpnPlan()) {
-            return false;
-        }
-
-        $endDate = trim((string) ($userSub->end_date ?? ''));
-        if ($endDate === '' || $endDate === UserSubscription::AWAIT_PAYMENT_DATE) {
-            return false;
-        }
-
-        try {
-            return Carbon::parse($endDate)->toDateString() < Carbon::today()->toDateString();
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
-    private function activateExpiredLegacyImmediately(UserSubscription $userSub, Subscription $subscription, string $planCode, Request $request): RedirectResponse|JsonResponse|null
-    {
-        $pricing = app(ReferralPricingService::class);
-        $catalog = app(VpnPlanCatalog::class);
-        $referral = Auth::user();
-        $referrer = $referral?->referrer;
-        $basePrice = $catalog->resolveBasePriceCents($subscription, $planCode);
-        $finalPrice = $pricing->getFinalPriceCents($subscription, $referrer, $referral, $basePrice);
-
-        if ((new Balance)->getBalance() < $finalPrice) {
-            $message = 'Тариф выбран. Для подключения пополните баланс.';
-
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'message' => $message,
-                    'balance_rub' => (new Balance)->getBalanceRub(),
-                ], 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
-            }
-
-            return redirect()->back()->with('subscription-success', $message);
-        }
-
-        try {
-            $fullConnectSubscription = new FullConnectSubscription($subscription, $userSub->note, null, $planCode);
-            $fullConnectSubscription->create();
-        } catch (\Throwable $e) {
-            Log::error('Immediate activation for expired legacy VPN failed: ' . $e->getMessage(), [
-                'user_subscription_id' => (int) $userSub->id,
-                'subscription_id' => (int) $subscription->id,
-                'vpn_plan_code' => $planCode,
-            ]);
-
-            $message = 'Выбор сохранён, но подключить тариф сразу не удалось.';
-
-            if ($request->expectsJson()) {
-                return response()->json(['message' => $message], 500, [], JSON_INVALID_UTF8_SUBSTITUTE);
-            }
-
-            return redirect()->back()->with('subscription-error', $message);
-        }
-
-        $userSub->update([
-            'next_vpn_plan_code' => null,
-            'is_rebilling' => false,
-        ]);
-
-        if ($request->expectsJson()) {
-            return response()->json([
-                'message' => 'Новый тариф подключен.',
-                'cards_html' => $this->renderSubscriptionRows(),
-                'balance_rub' => (new Balance)->getBalanceRub(),
-                'next_vpn_price_rub' => $this->getNextVpnPriceRub(),
-            ], 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
-        }
-
-        return redirect()->back()->with('subscription-success', 'Новый тариф подключен.');
     }
 
     public function clearNextVpnPlan(Request $request): RedirectResponse|JsonResponse
