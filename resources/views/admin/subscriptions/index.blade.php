@@ -899,6 +899,15 @@
                     <div><span class="font-semibold">Количество рефералов:</span> <span id="ud-user-referrals-count"></span></div>
                 </div>
 
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <form id="ud-impersonate-form" method="POST" action="" class="hidden">
+                        @csrf
+                        <button type="submit" class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                            Войти в кабинет пользователя
+                        </button>
+                    </form>
+                </div>
+
                 <div class="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
                     <div class="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
                         <div class="text-xs uppercase text-gray-500">Всего поступлений</div>
@@ -1142,6 +1151,7 @@
             const roleSelect = document.getElementById('ud-user-role-select');
             const roleSave = document.getElementById('ud-user-role-save');
             const roleStatus = document.getElementById('ud-user-role-status');
+            const impersonateForm = document.getElementById('ud-impersonate-form');
 
             if (!modal || !links.length) return;
 
@@ -1266,6 +1276,16 @@
                         if (roleSelect) {
                             roleSelect.value = data.user?.role ?? 'spy';
                             roleSelect.dataset.userId = data.user?.id ?? '';
+                        }
+                        if (impersonateForm) {
+                            const targetUserId = data.user?.id ?? '';
+                            const targetRole = data.user?.role ?? '';
+                            impersonateForm.action = targetUserId ? ('/admin/users/' + encodeURIComponent(targetUserId) + '/impersonate') : '';
+                            if (targetUserId && targetRole !== 'admin') {
+                                impersonateForm.classList.remove('hidden');
+                            } else {
+                                impersonateForm.classList.add('hidden');
+                            }
                         }
                         setRoleStatus('', 'info');
                         document.getElementById('ud-user-registered').textContent = data.user?.registered_at ?? '—';

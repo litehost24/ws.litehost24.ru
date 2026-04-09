@@ -23,6 +23,23 @@
         <x-banner />
 
         <div class="min-h-screen bg-gray-100">
+            @if (session()->has('impersonator_id'))
+                <div class="border-b border-amber-200 bg-amber-100">
+                    <div class="max-w-7xl mx-auto flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+                        <div class="text-sm text-amber-900">
+                            Вы вошли как пользователь
+                            <span class="font-semibold">{{ Auth::user()->name ?: ('#' . Auth::id()) }}</span>.
+                        </div>
+                        <form method="POST" action="{{ route('admin.impersonation.leave') }}">
+                            @csrf
+                            <button type="submit" class="inline-flex items-center rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-50">
+                                Вернуться в админку
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            @endif
+
             @livewire('navigation-menu')
 
             <!-- Page Heading -->

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminSupportChatController;
 use App\Http\Controllers\AdminStatisticsController;
+use App\Http\Controllers\AdminImpersonationController;
 use App\Http\Controllers\AdminVpnDomainController;
 use App\Http\Controllers\AdminPublicationController;
 use App\Http\Controllers\AdminPartnerReferralController;
@@ -116,6 +117,7 @@ Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified']
     Route::get('/admin/subscriptions/user/{user}/details', [\App\Http\Controllers\AdminSubscriptionController::class, 'userDetails'])->name('admin.subscriptions.user.details')->middleware('admin');
     Route::post('/admin/subscriptions/user/{user}/message', [AdminSubscriptionMessageController::class, 'send'])->name('admin.subscriptions.user.message')->middleware('admin');
     Route::post('/admin/users/{user}/role', [AdminUserRoleController::class, 'update'])->name('admin.users.role')->middleware('admin');
+    Route::post('/admin/users/{user}/impersonate', [AdminImpersonationController::class, 'start'])->name('admin.users.impersonate')->middleware('admin');
     Route::get('/admin/partner-referrals', [AdminPartnerReferralController::class, 'index'])->name('admin.partner-referrals')->middleware('admin');
     Route::post('/admin/partner-referrals/{partner}/{referral}/pricing', [AdminPartnerReferralController::class, 'updatePricing'])->name('admin.partner-referrals.pricing')->middleware('admin');
     Route::post('/admin/partner-referrals/{partner}/default', [AdminPartnerReferralController::class, 'updateDefault'])->name('admin.partner-referrals.default')->middleware('admin');
@@ -171,6 +173,10 @@ Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified']
         ->name('social.link.redirect');
     Route::get('/profile/auth/{provider}/callback', [SocialAuthController::class, 'linkCallback'])
         ->name('social.link.callback');
+});
+
+Route::middleware(['auth:sanctum', config('jetstream.auth_session')])->group(function () {
+    Route::post('/admin/impersonation/leave', [AdminImpersonationController::class, 'stop'])->name('admin.impersonation.leave');
 });
 
 Route::post('/payment/init', [PaymentController::class, 'init'])->withoutMiddleware([VerifyCsrfToken::class]);
