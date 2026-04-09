@@ -11,6 +11,11 @@ class AdminImpersonationController extends Controller
 {
     public const SESSION_KEY = 'impersonator_id';
 
+    private function storePasswordHash(Request $request, User $user): void
+    {
+        $request->session()->put('password_hash_web', $user->getAuthPassword());
+    }
+
     public function start(Request $request, User $user): RedirectResponse
     {
         $admin = $request->user();
@@ -33,6 +38,7 @@ class AdminImpersonationController extends Controller
         Auth::guard('web')->login($user);
         $request->session()->regenerate();
         $request->session()->put(self::SESSION_KEY, (int) $admin->id);
+        $this->storePasswordHash($request, $user);
 
         return redirect()
             ->route('my.main')
@@ -49,6 +55,7 @@ class AdminImpersonationController extends Controller
 
         Auth::guard('web')->login($admin);
         $request->session()->regenerate();
+        $this->storePasswordHash($request, $admin);
 
         return redirect()
             ->route('admin.subscriptions.index')
