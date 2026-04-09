@@ -19,6 +19,18 @@ class AdminImpersonationController extends Controller
         ]);
     }
 
+    private function bindUserToSession(Request $request, User $user): void
+    {
+        $guard = Auth::guard('web');
+
+        $guard->login($user);
+        $request->session()->put($guard->getName(), $user->getAuthIdentifier());
+        $request->setUserResolver(static fn () => $user);
+        Auth::shouldUse('web');
+        $guard->setUser($user);
+        $this->storePasswordHash($request, $user);
+    }
+
     public function start(Request $request, User $user): RedirectResponse
     {
         $admin = $request->user();
@@ -38,10 +50,7 @@ class AdminImpersonationController extends Controller
         }
 
         $request->session()->put(self::SESSION_KEY, (int) $admin->id);
-        Auth::guard('web')->login($user);
-        $request->session()->regenerate();
-        $request->session()->put(self::SESSION_KEY, (int) $admin->id);
-        $this->storePasswordHash($request, $user);
+        $this->bindUserToSession($request, $user);
 
         return redirect()
             ->route('my.main')
@@ -56,9 +65,7 @@ class AdminImpersonationController extends Controller
         $admin = User::find($impersonatorId);
         abort_unless($admin && $admin->isAdmin(), 403);
 
-        Auth::guard('web')->login($admin);
-        $request->session()->regenerate();
-        $this->storePasswordHash($request, $admin);
+        $this->bindUserToSession($request, $admin);
 
         return redirect()
             ->route('admin.subscriptions.index')
