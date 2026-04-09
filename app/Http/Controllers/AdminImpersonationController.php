@@ -13,7 +13,10 @@ class AdminImpersonationController extends Controller
 
     private function storePasswordHash(Request $request, User $user): void
     {
-        $request->session()->put('password_hash_web', $user->getAuthPassword());
+        $request->session()->put([
+            'password_hash_web' => $user->getAuthPassword(),
+            'password_hash_sanctum' => $user->getAuthPassword(),
+        ]);
     }
 
     public function start(Request $request, User $user): RedirectResponse
