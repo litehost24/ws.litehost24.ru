@@ -156,6 +156,7 @@ class UserSubscription extends Model
         return $connectedSubs
             ->concat($expiredOrInactive)
             ->sortByDesc('id')
+            ->unique(fn (self $sub) => (int) $sub->subscription_id)
             ->values();
     }
 
