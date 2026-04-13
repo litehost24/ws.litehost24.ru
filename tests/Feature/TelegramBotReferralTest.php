@@ -5,12 +5,15 @@ namespace Tests\Feature;
 use App\Models\TelegramIdentity;
 use App\Models\User;
 use App\Models\Payment;
+use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\UserSubscription;
+use App\Models\UserSubscriptionTopup;
 use App\Services\Telegram\TelegramEmailCodeGenerator;
 use App\Services\Payments\MonetaPaymentLinkService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -397,7 +400,7 @@ class TelegramBotReferralTest extends TestCase
         $menuText = (string) $menuResponse->json('text');
         $this->assertStringContainsString('Выберите тариф VPN:', $menuText);
         $this->assertStringContainsString('🏠 Обычное — 100 ₽/мес', $menuText);
-        $this->assertStringContainsString('Без ограничений по трафику. Для Wi‑Fi и проводного интернета.', $menuText);
+        $this->assertStringContainsString('Без ограничений по трафику. Wi‑Fi, роутер и кабель.', $menuText);
         $this->assertStringNotContainsString('📶 МТС — 100 ₽/мес', $menuText);
         $this->assertStringNotContainsString('Для мобильной сети МТС.', $menuText);
         $this->assertStringContainsString('📶 Мини — 60 ₽/мес', $menuText);
@@ -559,5 +562,115 @@ class TelegramBotReferralTest extends TestCase
 
         $id = $id->fresh();
         $this->assertNull($id->state);
+    }
+
+    public function test_bot_can_purchase_vpn_topup_via_command(): void
+    {
+        Http::fake();
+        Mail::fake();
+
+        config()->set('support.telegram.webhook_secret', 'secret');
+        config()->set('support.telegram.bot_token', 'token');
+        config()->set('support.telegram.support_chat_id', '-1003882846365');
+
+        $user = User::factory()->create([
+            'role' => 'user',
+            'email' => 'tg-topup@example.com',
+            'email_verified_at' => now(),
+        ]);
+
+        TelegramIdentity::create([
+            'user_id' => $user->id,
+            'telegram_user_id' => 990,
+            'telegram_chat_id' => 990,
+            'username' => 'tg990',
+            'first_name' => 'TG990',
+            'last_update_id' => 0,
+        ]);
+
+        Payment::create([
+            'user_id' => $user->id,
+            'amount' => 50000,
+            'order_name' => 'test-topup',
+        ]);
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+
+        $server = Server::query()->create([
+            'ip1' => '158.160.239.78',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+        ]);
+
+        $userSub = UserSubscription::factory()->create([
+            'user_id' => $user->id,
+            'subscription_id' => $subscription->id,
+            'price' => 20000,
+            'action' => 'create',
+            'is_processed' => true,
+            'is_rebilling' => true,
+            'end_date' => now()->addDays(20)->toDateString(),
+            'created_at' => now()->subDays(2),
+            'updated_at' => now()->subDays(2),
+            'file_path' => 'files/' . $user->id . '_peertgcap_' . $server->id . '_01_04_2026_10_00.zip',
+            'server_id' => $server->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_WHITE_IP,
+            'vpn_plan_code' => 'restricted_standard',
+            'vpn_plan_name' => 'Стандарт',
+            'vpn_traffic_limit_bytes' => 30 * 1024 * 1024 * 1024,
+            'connection_config' => 'vless://test#peertgcap',
+        ]);
+
+        DB::table('vpn_peer_traffic_daily')->insert([
+            'date' => now()->subDay()->toDateString(),
+            'server_id' => $server->id,
+            'user_id' => $user->id,
+            'peer_name' => 'peertgcap',
+            'public_key' => 'pk-peertgcap',
+            'ip' => '10.66.66.9/32',
+            'rx_bytes_delta' => 1024,
+            'tx_bytes_delta' => 2048,
+            'total_bytes_delta' => 5 * 1024 * 1024 * 1024,
+            'vless_rx_bytes_delta' => 0,
+            'vless_tx_bytes_delta' => 0,
+            'vless_total_bytes_delta' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->postTelegram([
+            'update_id' => 80,
+            'message' => [
+                'message_id' => 80,
+                'from' => ['id' => 990, 'username' => 'tg990', 'first_name' => 'TG990'],
+                'chat' => ['id' => 990, 'type' => 'private'],
+                'text' => '/topupvpn' . $userSub->id,
+            ],
+        ]);
+
+        $response = $this->postJson('/api/telegram/webhook/secret', [
+            'update_id' => 81,
+            'message' => [
+                'message_id' => 81,
+                'from' => ['id' => 990, 'username' => 'tg990', 'first_name' => 'TG990'],
+                'chat' => ['id' => 990, 'type' => 'private'],
+                'text' => '+10 ГБ — 50 ₽',
+            ],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('user_subscription_topups', [
+            'user_subscription_id' => $userSub->id,
+            'topup_code' => 'traffic_10gb',
+            'name' => '10 ГБ',
+            'price' => 5000,
+        ]);
+
+        $text = (string) $response->json('text');
+        $this->assertStringContainsString('Пакет 10 ГБ добавлен до', $text);
+        $this->assertStringContainsString('Неиспользованный остаток на следующий период не переносится.', $text);
+        $this->assertSame(1, UserSubscriptionTopup::query()->count());
     }
 }

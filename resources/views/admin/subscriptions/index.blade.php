@@ -435,7 +435,9 @@
                                             if ($sharingTooltip !== '') {
                                                 $refLabel .= ' · ' . $sharingTooltip;
                                             }
-                                            $firstModeLabel = $first->vpnAccessModeLabel();
+                                            $firstModeLabel = $first->vpnPlanLabel()
+                                                ?: $first->vpnAccessModeCabinetLabel()
+                                                ?: $first->vpnAccessModeLabel();
                                             $firstMode = $first->resolveVpnAccessMode();
                                             $firstSwitchTargetMode = $first->switchTargetVpnAccessMode();
                                             $firstSwitchTargetLabel = $firstSwitchTargetMode ? (\App\Models\Server::vpnAccessModeOptions()[$firstSwitchTargetMode] ?? null) : null;
@@ -665,7 +667,9 @@
                                                     $subInstructionUrl = null;
                                                     $subArchiveNote = trim((string) ($sub->note ?? ''));
                                                     $subArchiveTooltip = $subArchiveNote !== '' ? $subArchiveNote : 'Без пометки';
-                                                    $subModeLabel = $sub->vpnAccessModeLabel();
+                                                    $subModeLabel = $sub->vpnPlanLabel()
+                                                        ?: $sub->vpnAccessModeCabinetLabel()
+                                                        ?: $sub->vpnAccessModeLabel();
                                                     $subMode = $sub->resolveVpnAccessMode();
                                                     $subSwitchTargetMode = $sub->switchTargetVpnAccessMode();
                                                     $subSwitchTargetLabel = $subSwitchTargetMode ? (\App\Models\Server::vpnAccessModeOptions()[$subSwitchTargetMode] ?? null) : null;

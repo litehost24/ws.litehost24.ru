@@ -7,9 +7,9 @@ return [
 
     'plans' => [
         'regular_basic' => [
-            'label' => 'Обычное подключение',
+            'label' => 'Домашний интернет',
             'short_label' => 'Обычное',
-            'description' => 'Для Wi‑Fi и проводного интернета.',
+            'description' => 'Wi‑Fi, роутер и кабель.',
             'vpn_access_mode' => Server::VPN_ACCESS_REGULAR,
             'base_price_cents' => 10000,
             'traffic_limit_bytes' => null,

@@ -33,7 +33,7 @@ set -euo pipefail
 #   RELAY_BACKHAUL_PREFERRED_PING, RELAY_BACKHAUL_FALLBACK_PING (optional IPv6 ping targets for backhaul health checks; recommended)
 #   RELAY_BACKHAUL_IPV6_TABLE, RELAY_BACKHAUL_IPV6_RULE_PREF (default: 100 / 110 for dual-stack client IPv6 policy)
 #   SERVER_PUBLIC_IP (required; used for mTLS SAN and default client endpoint)
-#   TORRENT_GUARD, AWG_MAX_TCP_CONN, AWG_SYN_RATE, AWG_TOTAL_BW_MBIT
+#   TORRENT_GUARD, AWG_MAX_TCP_CONN, AWG_SYN_RATE, AWG_TOTAL_BW_MBIT, AWG_PER_PEER_BW_MBIT
 #   AWG_BLOCK_QUIC=0/1 (default 1; set 0 only if you intentionally want QUIC/HTTP3 enabled)
 #   CONFIRM_REWRITE=1 (required only if you intentionally rewrite an existing node)
 #   REISSUE_MTLS_CERTS=1 (optional: rotate server/laravel client certs on rewrite)
@@ -403,6 +403,7 @@ TORRENT_GUARD="${TORRENT_GUARD:-1}"
 AWG_MAX_TCP_CONN="${AWG_MAX_TCP_CONN:-512}"
 AWG_SYN_RATE="${AWG_SYN_RATE:-35/second}"
 AWG_TOTAL_BW_MBIT="${AWG_TOTAL_BW_MBIT:-200}"
+AWG_PER_PEER_BW_MBIT="${AWG_PER_PEER_BW_MBIT:-0}"
 AWG_BLOCK_QUIC="${AWG_BLOCK_QUIC:-1}"
 
 DNSMASQ_FILTER_AAAA="${DNSMASQ_FILTER_AAAA:-0}"
@@ -1305,7 +1306,9 @@ AWG_NET_CIDR='${AWG_NET_CIDR}'
 AWG_MAX_TCP_CONN='${AWG_MAX_TCP_CONN}'
 AWG_SYN_RATE='${AWG_SYN_RATE}'
 AWG_TOTAL_BW_MBIT='${AWG_TOTAL_BW_MBIT}'
+AWG_PER_PEER_BW_MBIT='${AWG_PER_PEER_BW_MBIT}'
 AWG_BLOCK_QUIC='${AWG_BLOCK_QUIC}'
+AWG_DB_PATH='/var/lib/awgctl/db.json'
 EOF
 chmod 0644 /etc/default/awg-guard
 
@@ -1318,7 +1321,9 @@ AWG_NET_CIDR="${AWG_NET_CIDR:-10.66.66.0/24}"
 AWG_MAX_TCP_CONN="${AWG_MAX_TCP_CONN:-512}"
 AWG_SYN_RATE="${AWG_SYN_RATE:-35/second}"
 AWG_TOTAL_BW_MBIT="${AWG_TOTAL_BW_MBIT:-200}"
+AWG_PER_PEER_BW_MBIT="${AWG_PER_PEER_BW_MBIT:-0}"
 AWG_BLOCK_QUIC="${AWG_BLOCK_QUIC:-1}"
+AWG_DB_PATH="${AWG_DB_PATH:-/var/lib/awgctl/db.json}"
 
 # Optional overrides, e.g.:
 #   AWG_MAX_TCP_CONN=1024
@@ -1332,6 +1337,105 @@ rule_or_warn() {
   if ! "$@"; then
     echo "WARN: failed command: $*" >&2
   fi
+}
+
+list_enabled_peers() {
+  python3 - "${AWG_DB_PATH}" <<'PY'
+import ipaddress
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    raise SystemExit(0)
+
+try:
+    data = json.loads(path.read_text())
+except Exception:
+    raise SystemExit(0)
+
+for client in data.get("clients", []):
+    if not client.get("enabled", True):
+        continue
+    raw_ip = str(client.get("ip", "")).strip()
+    if not raw_ip:
+        continue
+    ip4 = raw_ip.split("/", 1)[0]
+    try:
+        ip4_obj = ipaddress.ip_address(ip4)
+    except ValueError:
+        continue
+    last_octet = int(ip4.split(".")[-1])
+    minor = 100 + last_octet
+    if minor <= 100:
+        continue
+    ip6 = str(client.get("ip6", "")).strip()
+    ip6 = ip6.split("/", 1)[0] if ip6 else ""
+    print(f"{minor}\t{ip4}\t{ip6}")
+PY
+}
+
+apply_total_shaping() {
+  modprobe ifb || true
+  ip link add ifb0 type ifb 2>/dev/null || true
+  ip link set dev ifb0 up || true
+
+  tc qdisc del dev "${AWG_IF}" root 2>/dev/null || true
+  if ! tc qdisc add dev "${AWG_IF}" root cake bandwidth "${AWG_TOTAL_BW_MBIT}mbit" besteffort nat dual-dsthost; then
+    tc qdisc add dev "${AWG_IF}" root fq_codel || true
+  fi
+
+  tc qdisc del dev "${AWG_IF}" ingress 2>/dev/null || true
+  tc qdisc add dev "${AWG_IF}" ingress || true
+  tc filter del dev "${AWG_IF}" parent ffff: 2>/dev/null || true
+  tc filter add dev "${AWG_IF}" parent ffff: protocol all u32 match u32 0 0 action mirred egress redirect dev ifb0 || true
+
+  tc qdisc del dev ifb0 root 2>/dev/null || true
+  if ! tc qdisc add dev ifb0 root cake bandwidth "${AWG_TOTAL_BW_MBIT}mbit" besteffort nat dual-srchost; then
+    tc qdisc add dev ifb0 root fq_codel || true
+  fi
+}
+
+apply_per_peer_shaping() {
+  modprobe ifb || true
+  ip link add ifb0 type ifb 2>/dev/null || true
+  ip link set dev ifb0 up || true
+
+  tc qdisc del dev "${AWG_IF}" root 2>/dev/null || true
+  tc qdisc add dev "${AWG_IF}" root handle 1: htb default 9999 r2q 500
+  tc class add dev "${AWG_IF}" parent 1: classid 1:1 htb rate "${AWG_TOTAL_BW_MBIT}mbit" ceil "${AWG_TOTAL_BW_MBIT}mbit"
+  tc class add dev "${AWG_IF}" parent 1:1 classid 1:9999 htb rate "${AWG_TOTAL_BW_MBIT}mbit" ceil "${AWG_TOTAL_BW_MBIT}mbit"
+  tc qdisc add dev "${AWG_IF}" parent 1:9999 fq_codel || true
+
+  tc qdisc del dev "${AWG_IF}" ingress 2>/dev/null || true
+  tc qdisc add dev "${AWG_IF}" ingress || true
+  tc filter del dev "${AWG_IF}" parent ffff: 2>/dev/null || true
+  tc filter add dev "${AWG_IF}" parent ffff: protocol all u32 match u32 0 0 action mirred egress redirect dev ifb0 || true
+
+  tc qdisc del dev ifb0 root 2>/dev/null || true
+  tc qdisc add dev ifb0 root handle 2: htb default 9999 r2q 500
+  tc class add dev ifb0 parent 2: classid 2:1 htb rate "${AWG_TOTAL_BW_MBIT}mbit" ceil "${AWG_TOTAL_BW_MBIT}mbit"
+  tc class add dev ifb0 parent 2:1 classid 2:9999 htb rate "${AWG_TOTAL_BW_MBIT}mbit" ceil "${AWG_TOTAL_BW_MBIT}mbit"
+  tc qdisc add dev ifb0 parent 2:9999 fq_codel || true
+
+  while IFS=$'\t' read -r minor ip4 ip6; do
+    [[ -n "${minor}" && -n "${ip4}" ]] || continue
+
+    tc class add dev "${AWG_IF}" parent 1:1 classid "1:${minor}" htb rate "${AWG_PER_PEER_BW_MBIT}mbit" ceil "${AWG_PER_PEER_BW_MBIT}mbit" || true
+    tc qdisc add dev "${AWG_IF}" parent "1:${minor}" fq_codel || true
+    tc filter add dev "${AWG_IF}" parent 1: protocol ip prio 10 flower dst_ip "${ip4}/32" flowid "1:${minor}" || true
+    if [[ -n "${ip6}" ]]; then
+      tc filter add dev "${AWG_IF}" parent 1: protocol ipv6 prio 11 flower dst_ip "${ip6}/128" flowid "1:${minor}" || true
+    fi
+
+    tc class add dev ifb0 parent 2:1 classid "2:${minor}" htb rate "${AWG_PER_PEER_BW_MBIT}mbit" ceil "${AWG_PER_PEER_BW_MBIT}mbit" || true
+    tc qdisc add dev ifb0 parent "2:${minor}" fq_codel || true
+    tc filter add dev ifb0 parent 2: protocol ip prio 10 flower src_ip "${ip4}/32" flowid "2:${minor}" || true
+    if [[ -n "${ip6}" ]]; then
+      tc filter add dev ifb0 parent 2: protocol ipv6 prio 11 flower src_ip "${ip6}/128" flowid "2:${minor}" || true
+    fi
+  done < <(list_enabled_peers)
 }
 
 # Mangle guard chain (runs before NAT redirect).
@@ -1365,23 +1469,10 @@ iptables -t mangle -A AWG_GUARD -j RETURN
 iptables-save > /etc/iptables/rules.v4
 
 # Soft shaping to reduce impact of heavy users.
-modprobe ifb || true
-ip link add ifb0 type ifb 2>/dev/null || true
-ip link set dev ifb0 up || true
-
-tc qdisc del dev "${AWG_IF}" root 2>/dev/null || true
-if ! tc qdisc add dev "${AWG_IF}" root cake bandwidth "${AWG_TOTAL_BW_MBIT}mbit" besteffort nat dual-dsthost; then
-  tc qdisc add dev "${AWG_IF}" root fq_codel || true
-fi
-
-tc qdisc del dev "${AWG_IF}" ingress 2>/dev/null || true
-tc qdisc add dev "${AWG_IF}" ingress || true
-tc filter del dev "${AWG_IF}" parent ffff: 2>/dev/null || true
-tc filter add dev "${AWG_IF}" parent ffff: protocol all u32 match u32 0 0 action mirred egress redirect dev ifb0 || true
-
-tc qdisc del dev ifb0 root 2>/dev/null || true
-if ! tc qdisc add dev ifb0 root cake bandwidth "${AWG_TOTAL_BW_MBIT}mbit" besteffort nat dual-srchost; then
-  tc qdisc add dev ifb0 root fq_codel || true
+if [[ "${AWG_PER_PEER_BW_MBIT}" =~ ^[1-9][0-9]*$ ]]; then
+  apply_per_peer_shaping
+else
+  apply_total_shaping
 fi
 EOF
 chmod 0755 /usr/local/sbin/awg-guard-apply
@@ -1393,8 +1484,33 @@ cat >/etc/systemd/system/"${AWG_QUICK_UNIT}".d/30-awg-guard.conf <<'EOF'
 ExecStartPost=/usr/local/sbin/awg-guard-apply
 EOF
 
+cat >/etc/systemd/system/awg-peer-shape.service <<EOF
+[Unit]
+Description=Reapply AWG guard and shaping
+After=${AWG_QUICK_UNIT}
+Requires=${AWG_QUICK_UNIT}
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/awg-guard-apply
+EOF
+
+cat >/etc/systemd/system/awg-peer-shape.path <<EOF
+[Unit]
+Description=Watch AWG peer DB/config changes
+
+[Path]
+PathChanged=/var/lib/awgctl/db.json
+PathChanged=/etc/amnezia/amneziawg/${AWG_IF}.conf
+Unit=awg-peer-shape.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 systemctl daemon-reload
 /usr/local/sbin/awg-guard-apply
+systemctl enable --now awg-peer-shape.path
 fi
 
 step "9/10: Install awgctl (peer manager + encrypted client configs)"
@@ -2548,7 +2664,6 @@ Wants=network-online.target
 Type=oneshot
 EnvironmentFile=-/etc/default/relay-backhaul
 ExecStart=/usr/local/sbin/relay-ipv6-backhaul-policy sync
-ExecStop=/usr/local/sbin/relay-ipv6-backhaul-policy down
 EOF
 
 cat >/etc/systemd/system/relay-ipv6-backhaul-policy.timer <<EOF

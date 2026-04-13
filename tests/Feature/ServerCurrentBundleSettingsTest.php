@@ -37,7 +37,7 @@ class ServerCurrentBundleSettingsTest extends TestCase
             ->assertOk()
             ->assertSee('Какие серверы выдаём новым подпискам')
             ->assertSee('Подключение при ограничениях')
-            ->assertSee('Обычное подключение');
+            ->assertSee('Домашний интернет');
     }
 
     public function test_admin_can_save_current_bundle_server_ids(): void

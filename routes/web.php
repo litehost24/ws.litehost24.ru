@@ -3,6 +3,8 @@
 use App\Http\Controllers\AdminSupportChatController;
 use App\Http\Controllers\AdminStatisticsController;
 use App\Http\Controllers\AdminImpersonationController;
+use App\Http\Controllers\AppOpenController;
+use App\Http\Controllers\AppSubscriptionInviteController;
 use App\Http\Controllers\AdminVpnDomainController;
 use App\Http\Controllers\AdminPublicationController;
 use App\Http\Controllers\AdminPartnerReferralController;
@@ -45,6 +47,7 @@ Route::get('/', [Controller::class, 'showMainPage'])->name('home');
 Route::get('/about-company', [Controller::class, 'aboutCompany'])->name('about-company');
 Route::get('/contacts', [Controller::class, 'contacts'])->name('contacts');
 Route::get('/documents', [Controller::class, 'documents'])->name('documents');
+Route::get('/app/open', [AppOpenController::class, 'show'])->name('app.open');
 
 Route::post('/contact/email', [\App\Http\Controllers\ContactEmailController::class, 'send'])
     ->middleware('throttle:5,1')
@@ -62,6 +65,10 @@ Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified']
     Route::get('/my/referrals', [MyController::class, 'referrals'])->name('my.referrals');
 
     Route::get('/telegram/connect', [TelegramConnectController::class, 'connect'])->name('telegram.connect');
+    Route::post('/my/subscriptions/{userSubscription}/app-invites', [AppSubscriptionInviteController::class, 'store'])
+        ->name('my.subscriptions.app-invites.store');
+    Route::post('/my/subscriptions/{userSubscription}/app-invites/revoke', [AppSubscriptionInviteController::class, 'revoke'])
+        ->name('my.subscriptions.app-invites.revoke');
 
     Route::get('/support/chat', [SupportChatController::class, 'chat'])->name('support.chat');
     Route::get('/support/chat/messages', [SupportChatController::class, 'messages'])->name('support.chat.messages');

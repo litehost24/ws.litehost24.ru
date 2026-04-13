@@ -173,7 +173,7 @@ class UserSubscriptionSwitchVpnAccessModeTest extends TestCase
             'server_id' => $regular->id,
             'vpn_access_mode' => Server::VPN_ACCESS_REGULAR,
             'vpn_plan_code' => 'regular_basic',
-            'vpn_plan_name' => 'Обычное подключение',
+            'vpn_plan_name' => 'Домашний интернет',
         ]);
 
         $response = $this->actingAs($user)->getJson(route('user-subscription.switch-vpn-access-mode', [

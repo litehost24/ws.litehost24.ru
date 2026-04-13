@@ -54,6 +54,7 @@
         return number_format(max(0, $bytes) / 1073741824, 2, '.', ' ') . ' ГБ';
     };
     $topupOptions = app(\App\Services\VpnTopupCatalog::class)->all();
+    $currentNote = trim((string) ($userSub?->note ?? ''));
     $legacyNextPlanOptions = [];
     $showLegacyNextPlanSection = false;
     if (
@@ -70,6 +71,13 @@
         $showLegacyNextPlanSection = !empty($legacyNextPlanOptions);
     }
     $canUserDeleteSubscription = $userSub?->canUserDelete() ?? false;
+    $canIssueAppInvite = $userSub
+        && $subInfo->isConnected()
+        && !$subInfo->isExpired()
+        && ($userSub->resolveServer()?->usesNode1Api() ?? false);
+    $appInviteLabel = trim((string) ($currentNote ?? '')) !== ''
+        ? trim((string) $currentNote)
+        : $subDisplayName;
 @endphp
 <div
     class="service-block__card {{ $subInfo->isConnected() ? '--active' : '' }}"
@@ -123,11 +131,6 @@
             $connectedStatusClass = $hasMoneyNow ? 'text-green-600' : 'text-yellow-600';
         }
     @endphp
-    @if (in_array(Auth::user()->role, ['user', 'admin', 'partner'], true))
-        @php
-            $currentNote = trim((string) $subInfo->getNote());
-        @endphp
-    @endif
     <div class="service-block__header">
         <div class="service-block__title-row">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -243,6 +246,24 @@
                     <path d="M5 3.75A2.75 2.75 0 0 0 2.25 6.5v7A2.75 2.75 0 0 0 5 16.25h10A2.75 2.75 0 0 0 17.75 13.5v-7A2.75 2.75 0 0 0 15 3.75H5ZM4.75 6.5c0-.138.112-.25.25-.25h10c.138 0 .25.112.25.25v7a.25.25 0 0 1-.25.25H5a.25.25 0 0 1-.25-.25v-7ZM6.5 8a.75.75 0 0 0 0 1.5h7a.75.75 0 0 0 0-1.5h-7Zm0 2.5a.75.75 0 0 0 0 1.5H11a.75.75 0 0 0 0-1.5H6.5Z"/>
                 </svg>
                 <span>Открыть инструкцию</span>
+            </button>
+        </div>
+    @endif
+
+    @if ($canIssueAppInvite && $userSub)
+        <div class="service-block__app-bind-cta">
+            <div class="service-block__app-bind-copy">
+                <div class="service-block__app-bind-title">Приложение WS VPN</div>
+                <div class="service-block__app-bind-text">
+                    Получите ссылку или код привязки для телефона. Новый код автоматически отзывает предыдущий.
+                </div>
+            </div>
+            <button type="button"
+                    class="service-block__action-btn service-block__action-btn--secondary js-app-bind-btn"
+                    data-invite-url="{{ route('my.subscriptions.app-invites.store', ['userSubscription' => (int) $userSub->id]) }}"
+                    data-subscription-label="{{ $appInviteLabel }}"
+                    title="Сгенерировать ссылку привязки для приложения">
+                Получить код привязки
             </button>
         </div>
     @endif

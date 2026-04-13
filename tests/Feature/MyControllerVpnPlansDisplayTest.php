@@ -75,7 +75,7 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertDontSee('Для сети МТС (бета)', false);
         $response->assertSee('Стандарт', false);
         $response->assertSee('Премиум', false);
-        $response->assertSee('Обычное подключение', false);
+        $response->assertSee('Домашний интернет', false);
         $response->assertSee('60 ₽/мес', false);
         $response->assertSee('100 ₽/мес', false);
         $response->assertSee('200 ₽/мес', false);
@@ -89,6 +89,8 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertSee('10 ГБ', false);
         $response->assertSee('50 ₽', false);
         $response->assertSee('Неиспользованный остаток на следующий период не переносится.', false);
+        $response->assertSee('Получить код привязки', false);
+        $response->assertSee(route('my.subscriptions.app-invites.store', ['userSubscription' => $userSub->id]), false);
         $response->assertDontSee('Переключить на домашний интернет', false);
         $response->assertDontSee('Перейти на Эконом', false);
     }
@@ -137,7 +139,7 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertSee('Выбрать новый тариф со следующего периода', false);
         $response->assertSee('Без выбора нового тарифа подписка остановится в дату окончания.', false);
         $response->assertSee('старый тариф действует до', false);
-        $response->assertSee('🏠 Обычное подключение — 100 ₽/мес · Без ограничений по трафику', false);
+        $response->assertSee('🏠 Домашний интернет — 100 ₽/мес · Без ограничений по трафику', false);
         $response->assertDontSee('📶 Для сети МТС (бета) — 100 ₽/мес · Без ограничений по трафику', false);
         $response->assertSee('📶 Мини — 60 ₽/мес · 5 ГБ интернета', false);
         $response->assertSee('📶 Стандарт — 200 ₽/мес · 30 ГБ интернета', false);
@@ -266,7 +268,7 @@ class MyControllerVpnPlansDisplayTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Со следующего периода будет:', false);
-        $response->assertSee('Обычное подключение', false);
+        $response->assertSee('Домашний интернет', false);
         $response->assertSee('После продления понадобится новая инструкция и новый конфиг.', false);
         $response->assertSee('Отменить выбранный тариф', false);
     }
@@ -312,7 +314,7 @@ class MyControllerVpnPlansDisplayTest extends TestCase
         $response->assertOk();
         $response->assertSee('Выбрать новый тариф со следующего периода', false);
         $response->assertSee('Старая подписка уже закончилась. Выберите новый тариф, чтобы продолжить подключение на следующем периоде.', false);
-        $response->assertSee('🏠 Обычное подключение — 100 ₽/мес · Без ограничений по трафику', false);
+        $response->assertSee('🏠 Домашний интернет — 100 ₽/мес · Без ограничений по трафику', false);
         $response->assertSee('📶 Стандарт — 200 ₽/мес · 30 ГБ интернета', false);
     }
 }

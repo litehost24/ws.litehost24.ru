@@ -63,7 +63,7 @@
                         </div>
 
                         <div class="rounded-md bg-white p-3 shadow-sm">
-                            <label for="regular_server_id" class="mb-1 block text-sm font-medium text-gray-700">Обычное подключение</label>
+                            <label for="regular_server_id" class="mb-1 block text-sm font-medium text-gray-700">Домашний интернет</label>
                             <select name="regular_server_id" id="regular_server_id" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
                                 <option value="">Не выбран</option>
                                 @foreach (($bundleServerOptions[\App\Models\Server::VPN_ACCESS_REGULAR] ?? collect()) as $option)

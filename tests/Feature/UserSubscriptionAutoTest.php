@@ -25,7 +25,7 @@ class UserSubscriptionAutoTest extends TestCase
         $user = User::factory()->create();
         Payment::factory()->create(['user_id' => $user->id]);
 
-        $expiredDate = Carbon::today()->subDay()->toDateString();
+        $expiredDate = '2026-04-04';
 
         $this->actingAs($user);
         $originalSubscription = UserSubscription::factory()->create([
@@ -53,7 +53,7 @@ class UserSubscriptionAutoTest extends TestCase
         Payment::factory()->create(['user_id' => $user->id]);
 
         $server = $this->createNodeServer();
-        $expiredDate = Carbon::today()->subDay()->toDateString();
+        $expiredDate = '2026-04-04';
 
         $this->actingAs($user);
         $originalSubscription = UserSubscription::factory()->create([
@@ -86,7 +86,7 @@ class UserSubscriptionAutoTest extends TestCase
         Payment::factory()->create(['user_id' => $user->id]);
 
         $server = $this->createNodeServer();
-        $expiredDate = Carbon::today()->subDay()->toDateString();
+        $expiredDate = '2026-04-04';
 
         $this->actingAs($user);
         $originalSubscription = UserSubscription::factory()->create([
@@ -249,7 +249,7 @@ class UserSubscriptionAutoTest extends TestCase
 
         ProjectSetting::setValue(Server::CURRENT_WHITE_IP_SERVER_SETTING, (string) $targetServer->id);
 
-        $expiredDate = Carbon::today()->subDay()->toDateString();
+        $expiredDate = '2026-04-04';
 
         UserSubscription::factory()->create([
             'subscription_id' => $subscription->id,
@@ -288,6 +288,66 @@ class UserSubscriptionAutoTest extends TestCase
             return $mail->hasTo($user->email)
                 && (int) $mail->userSubscription->id === (int) $renewed->id;
         });
+    }
+
+    public function test_auto_rebilling_keeps_same_config_when_legacy_moves_to_new_plan_on_same_server(): void
+    {
+        Mail::fake();
+
+        $subscription = Subscription::factory()->create([
+            'name' => 'VPN',
+            'price' => 5000,
+        ]);
+        $user = User::factory()->create([
+            'email' => 'same-server@test.local',
+        ]);
+        Payment::factory()->create([
+            'user_id' => $user->id,
+            'amount' => 50000,
+        ]);
+
+        $server = Server::query()->create([
+            'ip1' => '46.23.1.10',
+            'node1_api_enabled' => 1,
+            'vpn_access_mode' => Server::VPN_ACCESS_REGULAR,
+        ]);
+
+        ProjectSetting::setValue(Server::CURRENT_REGULAR_SERVER_SETTING, (string) $server->id);
+
+        $expiredDate = Carbon::today()->subDay()->toDateString();
+        $path = $this->bundlePath($user->id, 'legacyregularsame', $server->id);
+
+        UserSubscription::factory()->create([
+            'subscription_id' => $subscription->id,
+            'user_id' => $user->id,
+            'price' => 5000,
+            'end_date' => $expiredDate,
+            'is_processed' => true,
+            'file_path' => $path,
+            'server_id' => $server->id,
+            'vpn_access_mode' => Server::VPN_ACCESS_REGULAR,
+            'vpn_plan_code' => null,
+            'vpn_plan_name' => null,
+            'vpn_traffic_limit_bytes' => null,
+            'next_vpn_plan_code' => 'regular_basic',
+        ]);
+
+        (new AutoUserSubscriptionManage())->start();
+
+        $result = UserSubscription::query()->orderBy('id')->get();
+
+        $this->assertCount(2, $result);
+        $renewed = $result->last();
+        $this->assertSame((int) $server->id, (int) $renewed->server_id);
+        $this->assertSame(Server::VPN_ACCESS_REGULAR, (string) $renewed->vpn_access_mode);
+        $this->assertSame('regular_basic', (string) $renewed->vpn_plan_code);
+        $this->assertSame('Домашний интернет', (string) $renewed->vpn_plan_name);
+        $this->assertNull($renewed->pending_vpn_access_mode_source_server_id);
+        $this->assertNull($renewed->pending_vpn_access_mode_source_peer_name);
+        $this->assertNull($renewed->pending_vpn_access_mode_disconnect_at);
+        $this->assertSame($path, (string) $renewed->file_path);
+
+        Mail::assertNothingSent();
     }
 
     public function test_auto_rebilling_keeps_plan_specific_server_override_for_current_plan(): void

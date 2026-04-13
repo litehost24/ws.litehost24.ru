@@ -185,6 +185,71 @@ class TelegramBotService
             return;
         }
 
+        if (preg_match('/^\/nextvpn(\d+)$/iu', $text, $m)) {
+            if (!$this->canUseBot($user)) {
+                $this->sendReferralRequired($identity->telegram_chat_id);
+            } elseif (!$this->hasVerifiedRealEmail($user)) {
+                $this->sendEmailRequired($identity->telegram_chat_id);
+            } else {
+                $userSubId = (int) $m[1];
+                $row = $this->findTelegramUserSubscription((int) $user->id, $userSubId);
+                if (!$row || !$this->isLegacyVpnSubscription($row)) {
+                    $this->api->sendMessage($identity->telegram_chat_id, 'Выбор следующего тарифа доступен только для старой VPN-подписки.');
+                    $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
+                } else {
+                    $this->identitySetState($identity, [
+                        'mode' => 'legacy_next_plan_pick',
+                        'user_subscription_id' => $userSubId,
+                    ], 600);
+                    $this->sendLegacyNextPlanMenu($identity->telegram_chat_id, $user, $row);
+                }
+            }
+            $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+            return;
+        }
+
+        if (preg_match('/^\/cancelnextvpn(\d+)$/iu', $text, $m)) {
+            if (!$this->canUseBot($user)) {
+                $this->sendReferralRequired($identity->telegram_chat_id);
+            } elseif (!$this->hasVerifiedRealEmail($user)) {
+                $this->sendEmailRequired($identity->telegram_chat_id);
+            } else {
+                $userSubId = (int) $m[1];
+                $result = $this->subs->clearLegacyNextVpnPlan($user, $userSubId);
+                $this->api->sendMessage($identity->telegram_chat_id, (string) ($result['message'] ?? 'Не удалось отменить выбор тарифа.'));
+                $row = $this->findTelegramUserSubscription((int) $user->id, $userSubId);
+                if ($row) {
+                    $this->sendSubscriptionCard($identity->telegram_chat_id, $row);
+                }
+                $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
+            }
+            $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+            return;
+        }
+
+        if (preg_match('/^\/topupvpn(\d+)$/iu', $text, $m)) {
+            if (!$this->canUseBot($user)) {
+                $this->sendReferralRequired($identity->telegram_chat_id);
+            } elseif (!$this->hasVerifiedRealEmail($user)) {
+                $this->sendEmailRequired($identity->telegram_chat_id);
+            } else {
+                $userSubId = (int) $m[1];
+                $row = $this->findTelegramUserSubscription((int) $user->id, $userSubId);
+                if (!$row || !$this->canTelegramTopupVpnSubscription($row)) {
+                    $this->api->sendMessage($identity->telegram_chat_id, 'Докупка трафика доступна только для активной лимитной VPN-подписки.');
+                    $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
+                } else {
+                    $this->identitySetState($identity, [
+                        'mode' => 'vpn_topup_pick',
+                        'user_subscription_id' => $userSubId,
+                    ], 600);
+                    $this->sendVpnTopupMenu($identity->telegram_chat_id, $row);
+                }
+            }
+            $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+            return;
+        }
+
         // Default: enforce referral gate.
         if (!$this->canUseBot($user)) {
             $this->sendReferralRequired($identity->telegram_chat_id);
@@ -356,6 +421,42 @@ class TelegramBotService
             return;
         }
 
+        if (is_array($state) && ($state['mode'] ?? '') === 'vpn_topup_pick') {
+            $choice = mb_strtolower($text);
+            if ($choice === 'назад') {
+                $this->identityClearState($identity);
+                $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
+                $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+                return;
+            }
+
+            $userSubId = (int) ($state['user_subscription_id'] ?? 0);
+            $row = $this->findTelegramUserSubscription((int) $user->id, $userSubId);
+            if (!$row || !$this->canTelegramTopupVpnSubscription($row)) {
+                $this->identityClearState($identity);
+                $this->api->sendMessage($identity->telegram_chat_id, 'Докупка трафика больше недоступна для этой подписки.');
+                $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
+                $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+                return;
+            }
+
+            foreach ($this->vpnTopupMenuOptions() as $option) {
+                if ($choice === mb_strtolower((string) ($option['button_text'] ?? ''))) {
+                    $this->identityClearState($identity);
+                    $result = $this->subs->purchaseTopup($user, $userSubId, (string) ($option['code'] ?? ''));
+                    $this->api->sendMessage($identity->telegram_chat_id, (string) ($result['message'] ?? 'Не удалось докупить трафик.'));
+                    $this->sendSubscriptionDetails($identity->telegram_chat_id, (int) $user->id, $userSubId);
+                    $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
+                    $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+                    return;
+                }
+            }
+
+            $this->api->sendMessage($identity->telegram_chat_id, 'Выберите пакет кнопкой.');
+            $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+            return;
+        }
+
         // State machine: buy flows.
         if (is_array($state) && ($state['mode'] ?? '') === 'buy_pick') {
             $choice = mb_strtolower($text);
@@ -449,6 +550,46 @@ class TelegramBotService
             }
             $this->api->sendMessage($identity->telegram_chat_id, implode("\n", $lines), $options);
             $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
+            return;
+        }
+
+        if (is_array($state) && ($state['mode'] ?? '') === 'legacy_next_plan_pick') {
+            $choice = mb_strtolower($text);
+            $userSubId = (int) ($state['user_subscription_id'] ?? 0);
+
+            if ($choice === 'назад') {
+                $this->identityClearState($identity);
+                $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
+                $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+                return;
+            }
+
+            $row = $this->findTelegramUserSubscription((int) $user->id, $userSubId);
+            if (!$row || !$this->isLegacyVpnSubscription($row)) {
+                $this->identityClearState($identity);
+                $this->api->sendMessage($identity->telegram_chat_id, 'Подписка не найдена или уже не требует выбора следующего тарифа.');
+                $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
+                $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+                return;
+            }
+
+            foreach ($this->vpnPlanMenuOptions($user) as $option) {
+                if ($choice === mb_strtolower((string) ($option['button_text'] ?? ''))) {
+                    $result = $this->subs->scheduleLegacyNextVpnPlan($user, $userSubId, (string) ($option['code'] ?? ''));
+                    $this->identityClearState($identity);
+                    $this->api->sendMessage($identity->telegram_chat_id, (string) ($result['message'] ?? 'Не удалось сохранить новый тариф.'));
+                    $updatedRow = $this->findTelegramUserSubscription((int) $user->id, $userSubId);
+                    if ($updatedRow) {
+                        $this->sendSubscriptionCard($identity->telegram_chat_id, $updatedRow);
+                    }
+                    $this->sendMenu($identity->telegram_chat_id, 'Выберите действие:');
+                    $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
+                    return;
+                }
+            }
+
+            $this->api->sendMessage($identity->telegram_chat_id, 'Выберите тариф кнопкой.');
+            $identity->update(['last_update_id' => max($updateId, $identity->last_update_id)]);
             return;
         }
 
@@ -656,6 +797,38 @@ class TelegramBotService
         ]);
     }
 
+    private function sendLegacyNextPlanMenu(int $chatId, User $user, UserSubscription $row): void
+    {
+        $options = $this->vpnPlanMenuOptions($user);
+
+        $keyboard = [
+            'keyboard' => array_values(array_map(
+                fn (array $option): array => [['text' => (string) $option['button_text']]],
+                $options
+            )),
+            'resize_keyboard' => true,
+            'one_time_keyboard' => true,
+        ];
+        $keyboard['keyboard'][] = [['text' => 'Назад']];
+
+        $title = $row->nextVpnPlanLabel()
+            ? ('Сейчас выбран: ' . $row->nextVpnPlanLabel())
+            : 'Выберите новый тариф со следующего периода:';
+
+        $lines = [$title, ''];
+        foreach ($options as $index => $option) {
+            $lines[] = (string) ($option['button_text'] ?? '');
+            $lines[] = (string) ($option['description_line'] ?? '');
+            if ($index !== array_key_last($options)) {
+                $lines[] = '';
+            }
+        }
+
+        $this->api->sendMessage($chatId, implode("\n", array_filter($lines, fn ($line) => $line !== '')), [
+            'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
+        ]);
+    }
+
     private function vpnPlanMenuOptions(User $user): array
     {
         $options = [];
@@ -686,7 +859,7 @@ class TelegramBotService
                 'description_line' => trim((string) ($plan['description'] ?? '')) !== ''
                     ? $suffix . '. ' . (string) $plan['description']
                     : ($suffix . '. ' . ($mode === \App\Models\Server::VPN_ACCESS_REGULAR
-                        ? 'Для Wi‑Fi и проводного интернета.'
+                        ? 'Wi‑Fi, роутер и кабель.'
                         : 'Для мобильной связи.')),
             ];
         }
@@ -926,6 +1099,47 @@ class TelegramBotService
         ]));
     }
 
+    private function sendVpnTopupMenu(int $chatId, UserSubscription $row): void
+    {
+        $options = $this->vpnTopupMenuOptions();
+
+        $keyboard = [
+            'keyboard' => array_values(array_map(
+                fn (array $option): array => [['text' => (string) $option['button_text']]],
+                $options
+            )),
+            'resize_keyboard' => true,
+            'one_time_keyboard' => true,
+        ];
+        $keyboard['keyboard'][] = [['text' => 'Назад']];
+
+        $lines = ['Выберите пакет трафика:', ''];
+        foreach ($options as $index => $option) {
+            $lines[] = (string) $option['button_text'];
+            if ($index !== array_key_last($options)) {
+                $lines[] = '';
+            }
+        }
+
+        $this->api->sendMessage($chatId, implode("\n", $lines), [
+            'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
+        ]);
+    }
+
+    private function vpnTopupMenuOptions(): array
+    {
+        return collect(app(\App\Services\VpnTopupCatalog::class)->all())
+            ->map(function (array $option): array {
+                return [
+                    'code' => (string) ($option['code'] ?? ''),
+                    'button_text' => '+' . (string) ($option['label'] ?? '') . ' — ' . (int) ($option['price_rub'] ?? 0) . ' ₽',
+                ];
+            })
+            ->filter(fn (array $option): bool => $option['code'] !== '')
+            ->values()
+            ->all();
+    }
+
     private function sendSubscriptionsCards(int $chatId, int $userId): void
     {
         $rows = UserSubscription::query()
@@ -933,6 +1147,9 @@ class TelegramBotService
             ->orderBy('id', 'desc')
             ->with('subscription:id,name')
             ->get();
+
+        UserSubscription::attachTrafficPeriodUsage($rows);
+        UserSubscription::attachTrafficDisplayUsage($rows);
 
         if ($rows->isEmpty()) {
             $this->api->sendMessage($chatId, "Подписок пока нет.");
@@ -956,16 +1173,15 @@ class TelegramBotService
 
     private function sendSubscriptionDetails(int $chatId, int $userId, int $userSubId): void
     {
-        $row = UserSubscription::query()
-            ->where('id', $userSubId)
-            ->where('user_id', $userId)
-            ->with('subscription:id,name')
-            ->first();
+        $row = $this->findTelegramUserSubscription($userId, $userSubId);
 
         if (!$row) {
             $this->api->sendMessage($chatId, "Подписка не найдена. Откройте «Мои подписки» еще раз.");
             return;
         }
+
+        UserSubscription::attachTrafficPeriodUsage(collect([$row]));
+        UserSubscription::attachTrafficDisplayUsage(collect([$row]));
 
         $this->sendSubscriptionCard($chatId, $row);
     }
@@ -998,8 +1214,28 @@ class TelegramBotService
             } else {
                 $baseLines[] = 'Новый тариф не выбран: подписка остановится в дату окончания.';
             }
+
+            $baseLines[] = '';
+            $baseLines[] = 'Выбрать новый тариф: /nextvpn' . $row->id;
+            if ($nextPlanLabel) {
+                $baseLines[] = 'Отменить выбор: /cancelnextvpn' . $row->id;
+            }
         } else {
             $baseLines[] = "Автопродление: {$rebill}";
+        }
+
+        $limitBytes = $row->vpnTrafficLimitBytes();
+        if ($limitBytes !== null) {
+            $usedBytes = (int) ($row->traffic_period_bytes ?? 0);
+            $remainingBytes = (int) ($row->traffic_remaining_bytes ?? max(0, $limitBytes - $usedBytes));
+            $baseLines[] = 'Использовано: ' . $this->formatTrafficForTelegram($usedBytes);
+            $baseLines[] = 'Осталось: ' . $this->formatTrafficForTelegram($remainingBytes);
+            if ($this->canTelegramTopupVpnSubscription($row)) {
+                $baseLines[] = 'Докупить трафик: /topupvpn' . $row->id;
+            }
+        } else {
+            $displayBytes = (int) ($row->traffic_display_bytes ?? 0);
+            $baseLines[] = 'Трафик за период: ' . $this->formatTrafficForTelegram($displayBytes);
         }
 
         if ($note !== '') {
@@ -1066,6 +1302,29 @@ class TelegramBotService
         ];
     }
 
+    private function canTelegramTopupVpnSubscription(UserSubscription $row): bool
+    {
+        return $row->isLocallyActive()
+            && $row->vpnTrafficLimitBytes() !== null
+            && trim((string) ($row->vpn_plan_code ?? '')) !== ''
+            && trim((string) ($row->subscription?->name ?? '')) === 'VPN';
+    }
+
+    private function formatTrafficForTelegram(int $bytes): string
+    {
+        if ($bytes <= 0) {
+            return '0 ГБ';
+        }
+
+        $gigabytes = $bytes / (1024 * 1024 * 1024);
+
+        if ($gigabytes >= 10) {
+            return number_format($gigabytes, 1, '.', '') . ' ГБ';
+        }
+
+        return number_format($gigabytes, 2, '.', '') . ' ГБ';
+    }
+
     private function identitySetState(TelegramIdentity $identity, array $state, int $ttlSeconds): void
     {
         $identity->forceFill([
@@ -1102,5 +1361,20 @@ class TelegramBotService
         }
 
         $this->api->sendMessage($chatId, $text);
+    }
+
+    private function findTelegramUserSubscription(int $userId, int $userSubId): ?UserSubscription
+    {
+        return UserSubscription::query()
+            ->where('id', $userSubId)
+            ->where('user_id', $userId)
+            ->with('subscription:id,name')
+            ->first();
+    }
+
+    private function isLegacyVpnSubscription(UserSubscription $row): bool
+    {
+        return $row->isLegacyVpnPlan()
+            && trim((string) ($row->subscription?->name ?? '')) === 'VPN';
     }
 }

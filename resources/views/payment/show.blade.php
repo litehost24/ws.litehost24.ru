@@ -193,7 +193,7 @@
                                 @endif
                             </div>
                             <div class="mt-2 text-xs text-gray-500">
-                                Обычное подключение подходит для Wi‑Fi и проводного интернета. МТС, Эконом, Стандарт и Премиум
+                                Домашний интернет подходит для Wi‑Fi, роутера и кабеля. МТС, Эконом, Стандарт и Премиум
                                 рассчитаны на мобильную связь.
                             </div>
                         </form>
@@ -422,6 +422,72 @@
     .service-block__col--empty {
         display: none;
     }
+    .service-block__compact-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        width: 100%;
+    }
+    .service-block__compact-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        width: 100%;
+        padding: 14px 16px;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        background: #fff;
+        text-align: left;
+        transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+    }
+    .service-block__compact-item:hover {
+        background: #f9fafb;
+        border-color: #d1d5db;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
+    }
+    .service-block__compact-main {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+    }
+    .service-block__compact-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #111827;
+        line-height: 1.3;
+    }
+    .service-block__compact-plan {
+        font-size: 13px;
+        color: #4b5563;
+    }
+    .service-block__compact-meta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        font-size: 13px;
+        color: #4b5563;
+    }
+    .service-block__compact-status {
+        display: inline-flex;
+        align-items: center;
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 9999px;
+        background: #dcfce7;
+        color: #166534;
+        font-weight: 700;
+    }
+    .service-block__compact-status--muted {
+        background: #f3f4f6;
+        color: #374151;
+    }
+    .service-block__modal-card-wrap > .service-block__card {
+        margin: 0;
+    }
     @media (min-width: 901px) {
         .service-block__col--empty {
             display: block;
@@ -430,6 +496,13 @@
     @media (max-width: 900px) {
         .service-block__row {
             flex-direction: column;
+        }
+        .service-block__compact-item {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .service-block__compact-meta {
+            justify-content: flex-start;
         }
     }
     .service-block__note-form {
@@ -677,6 +750,34 @@
         height: 16px;
         margin-right: 8px;
         flex: 0 0 auto;
+    }
+    .service-block__app-bind-cta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        width: 100%;
+        margin-top: 14px;
+        padding: 13px 14px;
+        border: 1px solid #c7d2fe;
+        border-radius: 14px;
+        background: linear-gradient(180deg, #f7f7ff 0%, #eef2ff 100%);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.88);
+    }
+    .service-block__app-bind-copy {
+        min-width: 0;
+    }
+    .service-block__app-bind-title {
+        color: #312e81;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .service-block__app-bind-text {
+        margin-top: 3px;
+        color: #4c5a73;
+        font-size: 12px;
+        line-height: 1.4;
     }
     .service-block__legacy-plan {
         width: 100%;
@@ -989,6 +1090,10 @@
             flex-direction: column;
             align-items: stretch;
         }
+        .service-block__app-bind-cta {
+            flex-direction: column;
+            align-items: stretch;
+        }
         .service-block__action-btn--instruction {
             width: 100%;
             justify-content: center;
@@ -1105,6 +1210,122 @@
         background: #1e40af;
         color: #fff;
     }
+    .page-app-bind-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(15, 23, 42, 0.55);
+        z-index: 10020;
+    }
+    .page-app-bind-dialog {
+        width: min(760px, 100%);
+        padding: 22px 22px 18px;
+        border-radius: 20px;
+        border: 1px solid #d7deee;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+    }
+    .page-app-bind-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+    }
+    .page-app-bind-title {
+        margin: 0;
+        color: #0f172a;
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.15;
+    }
+    .page-app-bind-text {
+        margin-top: 10px;
+        color: #475569;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    .page-app-bind-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+        margin-top: 18px;
+    }
+    .page-app-bind-field {
+        padding: 14px;
+        border: 1px solid #dbe3ef;
+        border-radius: 16px;
+        background: #fff;
+    }
+    .page-app-bind-label {
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .page-app-bind-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 10px;
+    }
+    .page-app-bind-input {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 44px;
+        padding: 0 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        background: #f8fafc;
+        color: #0f172a;
+        font-size: 14px;
+        font-weight: 600;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+    .page-app-bind-meta {
+        margin-top: 16px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: #eef2ff;
+        color: #3730a3;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .page-app-bind-qr {
+        margin-top: 16px;
+        padding: 14px;
+        border: 1px solid #dbe3ef;
+        border-radius: 16px;
+        background: #fff;
+        text-align: center;
+    }
+    .page-app-bind-qr-image {
+        display: none;
+        width: min(100%, 280px);
+        margin: 12px auto 0;
+        padding: 8px;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        background: #fff;
+    }
+    .page-app-bind-qr-image.is-visible {
+        display: block;
+    }
+    .page-app-bind-qr-state {
+        margin-top: 12px;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .page-app-bind-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 18px;
+    }
     @media (max-width: 640px) {
         .page-confirm-dialog {
             padding: 18px 18px 16px;
@@ -1120,6 +1341,22 @@
             flex-direction: column-reverse;
         }
         .page-confirm-btn {
+            width: 100%;
+        }
+        .page-app-bind-dialog {
+            padding: 18px 18px 16px;
+            border-radius: 18px;
+        }
+        .page-app-bind-title {
+            font-size: 21px;
+        }
+        .page-app-bind-row,
+        .page-app-bind-actions {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .page-app-bind-row .lh-copy-btn,
+        .page-app-bind-actions .page-confirm-btn {
             width: 100%;
         }
     }
@@ -1327,6 +1564,228 @@
             }, 0);
         });
     }
+    function openSubscriptionDetailsModal(id) {
+        const modal = document.getElementById('subscription-details-modal-' + id);
+        if (!modal) return;
+
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeSubscriptionDetailsModal(id) {
+        const modal = document.getElementById('subscription-details-modal-' + id);
+        if (!modal) return;
+
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function formatInviteExpiry(value) {
+        if (!value) {
+            return 'Код действует 30 минут. Новый код отзывает предыдущий.';
+        }
+
+        try {
+            return 'Код действует до ' + new Date(value).toLocaleString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+            }) + '. Новый код отзывает предыдущий.';
+        } catch (e) {
+            return 'Код действует 30 минут. Новый код отзывает предыдущий.';
+        }
+    }
+
+    function normalizeAppBindError(message, status) {
+        const raw = String(message || '').trim();
+        if (!raw) {
+            return 'Не удалось подготовить код привязки. Попробуйте ещё раз чуть позже.';
+        }
+
+        if ((typeof status === 'number' && status >= 500) || raw.includes('SQLSTATE') || raw.includes('QueryException')) {
+            return 'Не удалось подготовить код привязки. Попробуйте ещё раз чуть позже.';
+        }
+
+        return raw;
+    }
+
+    function prepareAppBindModal(subscriptionLabel) {
+        const overlay = document.getElementById('app-bind-modal');
+        if (!overlay) return;
+
+        const title = overlay.querySelector('#app-bind-title');
+        const codeInput = overlay.querySelector('#app-bind-code');
+        const codeCopy = overlay.querySelector('#app-bind-copy-code');
+        const meta = overlay.querySelector('#app-bind-meta');
+        const qrImage = overlay.querySelector('#app-bind-qr-image');
+        const qrState = overlay.querySelector('#app-bind-qr-state');
+
+        if (title) {
+            title.textContent = subscriptionLabel
+                ? ('Привязка: ' + subscriptionLabel)
+                : 'Привязка подписки';
+        }
+        if (codeInput) codeInput.value = 'Готовим код...';
+        if (codeCopy) {
+            codeCopy.setAttribute('data-copy', '');
+            codeCopy.disabled = true;
+        }
+        if (meta) meta.textContent = 'Готовим код привязки...';
+        if (qrImage) {
+            qrImage.classList.remove('is-visible');
+            qrImage.removeAttribute('src');
+            qrImage.setAttribute('alt', '');
+        }
+        if (qrState) {
+            qrState.textContent = 'Генерируем QR-код...';
+        }
+
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function openAppBindModal(invite, subscriptionLabel) {
+        const overlay = document.getElementById('app-bind-modal');
+        if (!overlay) return;
+
+        const code = String(invite?.code || invite?.token || '').trim();
+        const qrDataUri = String(invite?.qr_data_uri || '').trim();
+        const codeInput = overlay.querySelector('#app-bind-code');
+        const codeCopy = overlay.querySelector('#app-bind-copy-code');
+        const meta = overlay.querySelector('#app-bind-meta');
+        const qrImage = overlay.querySelector('#app-bind-qr-image');
+        const qrState = overlay.querySelector('#app-bind-qr-state');
+
+        prepareAppBindModal(subscriptionLabel);
+
+        if (codeInput) codeInput.value = code;
+        if (codeCopy) codeCopy.setAttribute('data-copy', code);
+        if (codeCopy) codeCopy.disabled = code === '';
+        if (meta) meta.textContent = formatInviteExpiry(invite?.expires_at || '');
+        if (qrImage && qrDataUri) {
+            qrImage.setAttribute('src', qrDataUri);
+            qrImage.setAttribute('alt', 'QR-код привязки подписки');
+            qrImage.classList.add('is-visible');
+        }
+        if (qrState) {
+            qrState.textContent = qrDataUri
+                ? 'Откройте QR в приложении или камерой телефона.'
+                : 'QR-код пока недоступен. Используйте код выше.';
+        }
+    }
+
+    function showAppBindError(message, status) {
+        const overlay = document.getElementById('app-bind-modal');
+        if (!overlay) return;
+
+        const normalized = normalizeAppBindError(message, status);
+        const codeInput = overlay.querySelector('#app-bind-code');
+        const codeCopy = overlay.querySelector('#app-bind-copy-code');
+        const meta = overlay.querySelector('#app-bind-meta');
+        const qrState = overlay.querySelector('#app-bind-qr-state');
+        const qrImage = overlay.querySelector('#app-bind-qr-image');
+
+        if (codeInput) {
+            codeInput.value = 'Код не получен';
+        }
+        if (codeCopy) {
+            codeCopy.disabled = true;
+            codeCopy.setAttribute('data-copy', '');
+        }
+        if (meta) {
+            meta.textContent = normalized;
+        }
+        if (qrImage) {
+            qrImage.classList.remove('is-visible');
+            qrImage.removeAttribute('src');
+            qrImage.setAttribute('alt', '');
+        }
+        if (qrState) {
+            qrState.textContent = 'Повторите попытку позже.';
+        }
+    }
+
+    function closeAppBindModal() {
+        const overlay = document.getElementById('app-bind-modal');
+        if (!overlay) return;
+
+        overlay.style.display = 'none';
+        overlay.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+    }
+
+    function attachAppBindButton(button) {
+        if (!button || button.dataset.appBindBound) return;
+        button.dataset.appBindBound = '1';
+
+        button.addEventListener('click', async function () {
+            if (button.dataset.busy === '1') {
+                return;
+            }
+
+            const inviteUrl = button.dataset.inviteUrl || '';
+            if (!inviteUrl) {
+                showToast('Не найден маршрут для привязки', 'error');
+                return;
+            }
+
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+            button.dataset.busy = '1';
+            button.disabled = true;
+            prepareAppBindModal(button.dataset.subscriptionLabel || '');
+
+            try {
+                const response = await fetch(inviteUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': csrf,
+                        'Accept': 'application/json',
+                    },
+                });
+
+                const data = await response.json().catch(function () { return {}; });
+                if (!response.ok) {
+                    throw new Error(normalizeAppBindError(data.message || '', response.status));
+                }
+
+                openAppBindModal(data.invite || {}, button.dataset.subscriptionLabel || '');
+            } catch (error) {
+                showAppBindError(error.message || 'Не удалось создать код привязки.');
+                showToast(error.message || 'Ошибка', 'error');
+            } finally {
+                button.dataset.busy = '';
+                button.disabled = false;
+            }
+        });
+    }
+
+    function attachAppBindButtons(root) {
+        const scope = root || document;
+        scope.querySelectorAll('.js-app-bind-btn').forEach(function (button) {
+            attachAppBindButton(button);
+        });
+    }
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape') {
+            return;
+        }
+
+        const appBindModal = document.getElementById('app-bind-modal');
+        if (appBindModal && appBindModal.getAttribute('aria-hidden') === 'false') {
+            return;
+        }
+
+        document.querySelectorAll('[id^="subscription-details-modal-"]').forEach(function (modal) {
+            if (!modal.classList.contains('hidden')) {
+                modal.classList.add('hidden');
+            }
+        });
+        document.body.style.overflow = '';
+    });
     function insertSubscriptionCard(cardHtml) {
         const rows = document.querySelector('.service-block__rows');
         if (!rows || !cardHtml) return;
@@ -1675,22 +2134,24 @@
 
                 showToast(data.message || 'Готово', 'success');
 
-                if (data.cards_html) {
-                    const updatedRows = replaceSubscriptionRows(data.cards_html);
-                    if (updatedRows) {
-                        attachNoteForms(updatedRows);
-                        attachSubActionLinks(updatedRows);
-                    }
+                    if (data.cards_html) {
+                        const updatedRows = replaceSubscriptionRows(data.cards_html);
+                        if (updatedRows) {
+                            attachNoteForms(updatedRows);
+                            attachSubActionLinks(updatedRows);
+                            attachAppBindButtons(updatedRows);
+                        }
 
-                    if (action === 'switch-mode' || action === 'switch-plan') {
-                        const updatedCard = findSubscriptionCardByHtml(data.card_html);
-                        instructionSubIdToOpen = getInstructionSubId(updatedCard);
+                        if (action === 'switch-mode' || action === 'switch-plan') {
+                            const updatedCard = findSubscriptionCardByHtml(data.card_html);
+                            instructionSubIdToOpen = getInstructionSubId(updatedCard);
                     }
                 } else if (data.card_html) {
                     const updatedCard = replaceSubscriptionCard(data.card_html, null, sourceCard);
                     if (updatedCard) {
                         attachNoteForms(updatedCard);
                         attachSubActionLinks(updatedCard);
+                        attachAppBindButtons(updatedCard);
 
                         if (action === 'switch-mode' || action === 'switch-plan') {
                             instructionSubIdToOpen = getInstructionSubId(updatedCard);
@@ -1790,6 +2251,7 @@
                         if (updatedRows) {
                             attachNoteForms(updatedRows);
                             attachSubActionLinks(updatedRows);
+                            attachAppBindButtons(updatedRows);
                         }
                         insertedCard = findSubscriptionCardByHtml(data.card_html);
                     }
@@ -1800,11 +2262,13 @@
                             if (insertedCard) {
                                 attachNoteForms(insertedCard);
                                 attachSubActionLinks(insertedCard);
+                                attachAppBindButtons(insertedCard);
                             } else {
                                 const rows = document.querySelector('.service-block__rows');
                                 if (rows) {
                                     attachNoteForms(rows);
                                     attachSubActionLinks(rows);
+                                    attachAppBindButtons(rows);
                                 }
                             }
                         }
@@ -1832,6 +2296,7 @@
 
         attachNoteForms(document);
         attachSubActionLinks(document);
+        attachAppBindButtons(document);
     });
 
     document.addEventListener('click', function (event) {
@@ -1866,6 +2331,37 @@
 <div id="page-toast" style="display:none;position:fixed;left:50%;top:20%;transform:translateX(-50%);z-index:9999;min-width:420px;max-width:560px;padding:20px 22px;border-radius:10px;font-size:16px;font-weight:600;transition:opacity .2s;background:#fff;color:#111827;border:1px solid #e5e7eb;box-shadow:0 10px 25px rgba(0,0,0,.18);text-align:left;">
     <button type="button" onclick="hideToast()" style="position:absolute;right:12px;top:10px;width:28px;height:28px;border:none;background:transparent;color:#6b7280;font-size:20px;line-height:1;cursor:pointer;">×</button>
     <div id="page-toast-text"></div>
+</div>
+<div id="app-bind-modal" class="page-app-bind-overlay" aria-hidden="true" onclick="if(event.target===this) closeAppBindModal()">
+    <div class="page-app-bind-dialog" role="dialog" aria-modal="true" aria-labelledby="app-bind-title">
+        <div class="page-app-bind-head">
+            <div>
+                <h3 id="app-bind-title" class="page-app-bind-title">Привязка подписки</h3>
+                <div class="page-app-bind-text">
+                    Скопируйте код вручную или откройте QR-код на экране, чтобы привязать подписку в приложении WS VPN.
+                </div>
+            </div>
+            <button type="button" class="w-9 h-9 inline-flex items-center justify-center rounded-full text-xl font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100" onclick="closeAppBindModal()">×</button>
+        </div>
+        <div class="page-app-bind-grid">
+            <div class="page-app-bind-field">
+                <div class="page-app-bind-label">Код привязки</div>
+                <div class="page-app-bind-row">
+                    <input id="app-bind-code" type="text" readonly class="page-app-bind-input" value="">
+                    <button type="button" id="app-bind-copy-code" class="lh-copy-btn" data-copy="">Скопировать код</button>
+                </div>
+            </div>
+        </div>
+        <div class="page-app-bind-qr">
+            <div class="page-app-bind-label">QR-код</div>
+            <img id="app-bind-qr-image" class="page-app-bind-qr-image" src="" alt="">
+            <div id="app-bind-qr-state" class="page-app-bind-qr-state">Генерируем QR-код...</div>
+        </div>
+        <div id="app-bind-meta" class="page-app-bind-meta">Код действует 30 минут. Новый код отзывает предыдущий.</div>
+        <div class="page-app-bind-actions">
+            <button type="button" class="page-confirm-btn" onclick="closeAppBindModal()">Закрыть</button>
+        </div>
+    </div>
 </div>
 
 

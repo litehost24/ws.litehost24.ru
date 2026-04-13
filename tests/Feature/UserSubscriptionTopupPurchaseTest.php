@@ -143,7 +143,7 @@ class UserSubscriptionTopupPurchaseTest extends TestCase
             'server_id' => $server->id,
             'vpn_access_mode' => Server::VPN_ACCESS_REGULAR,
             'vpn_plan_code' => 'regular_basic',
-            'vpn_plan_name' => 'Обычное подключение',
+            'vpn_plan_name' => 'Домашний интернет',
             'vpn_traffic_limit_bytes' => null,
         ]);
 

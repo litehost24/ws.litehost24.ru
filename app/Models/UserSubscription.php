@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -64,6 +65,8 @@ class UserSubscription extends Model
         'pending_vpn_access_mode_source_peer_name',
         'pending_vpn_access_mode_disconnect_at',
         'pending_vpn_access_mode_error',
+        'app_config_version',
+        'app_config_updated_at',
         'vless_blocked_until',
         'note',
     ];
@@ -71,6 +74,7 @@ class UserSubscription extends Model
     protected $casts = [
         'vpn_traffic_limit_bytes' => 'integer',
         'pending_vpn_access_mode_disconnect_at' => 'datetime',
+        'app_config_updated_at' => 'datetime',
         'vless_blocked_until' => 'datetime',
         'dual_protocol_last_seen_at' => 'datetime',
     ];
@@ -939,6 +943,16 @@ class UserSubscription extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function subscriptionInvites(): HasMany
+    {
+        return $this->hasMany(SubscriptionInvite::class);
+    }
+
+    public function subscriptionAccesses(): HasMany
+    {
+        return $this->hasMany(SubscriptionAccess::class);
     }
 
     public function cabinetDeviceKey(): string

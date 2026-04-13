@@ -66,7 +66,7 @@ class Server extends Model
     {
         return [
             self::VPN_ACCESS_WHITE_IP => 'Подключение при ограничениях',
-            self::VPN_ACCESS_REGULAR => 'Обычное подключение',
+            self::VPN_ACCESS_REGULAR => 'Домашний интернет',
         ];
     }
 

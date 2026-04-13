@@ -127,7 +127,7 @@ class CheckSubscriptionExpiryNotificationTest extends TestCase
             return count($mail->subscriptions) === 1
                 && ($mail->subscriptions[0]['kind'] ?? null) === 'legacy_next_plan_ready'
                 && str_contains($html, 'Со следующего периода будет:')
-                && str_contains($html, 'Обычное подключение')
+                && str_contains($html, 'Домашний интернет')
                 && str_contains($html, 'После продления понадобится новая инструкция и новый конфиг.')
                 && $mail->hasTo($user->email);
         });
