@@ -1,0 +1,7 @@
+{
+  "version": "4.3.3",
+  "title": "LiteVPN 4.3.3",
+  "release_notes": "Managed failover controls moved to the main screen.\nPrimary and backup roles can now be assigned directly on the main subscription cards.\nImproved migration and persistence for managed auto-failover roles.",
+  "apk_url": "https://ws.litehost24.ru/storage/files/LiteVPN-android.apk",
+  "apk_file_name": "litevpn-standalone-v4.3.3.apk"
+}
