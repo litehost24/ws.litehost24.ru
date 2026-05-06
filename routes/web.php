@@ -13,6 +13,7 @@ use App\Http\Controllers\AdminSubscriptionMessageController;
 use App\Http\Controllers\AdminUserRoleController;
 use App\Http\Controllers\AdminXrayBypassController;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\DomainCheckController;
 use App\Http\Controllers\MyController;
 use App\Http\Controllers\NetworkCheckController;
 use App\Http\Controllers\PartnerReferralController;
@@ -61,6 +62,15 @@ Route::get('/ip-check', [NetworkCheckController::class, 'show'])
         VerifyCsrfToken::class,
     ])
     ->name('ip-check');
+Route::get('/domain-check', [DomainCheckController::class, 'show'])
+    ->withoutMiddleware([
+        StartSession::class,
+        ApplyReferralLink::class,
+        RedirectUnavailableIntendedPage::class,
+        ShareErrorsFromSession::class,
+        VerifyCsrfToken::class,
+    ])
+    ->name('domain-check');
 Route::get('/app/open', [AppOpenController::class, 'show'])->name('app.open');
 
 Route::post('/contact/email', [\App\Http\Controllers\ContactEmailController::class, 'send'])
