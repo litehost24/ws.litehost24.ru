@@ -10,6 +10,7 @@ class MainMenuList
      */
     public static array $unauthMenu = [
         'Главная' => 'home',
+        'Проверка IP' => 'ip-check',
         'О компании' => 'about-company',
         'Контакты' => 'contacts',
         'Правовая информация' => 'documents',

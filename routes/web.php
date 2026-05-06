@@ -14,6 +14,7 @@ use App\Http\Controllers\AdminUserRoleController;
 use App\Http\Controllers\AdminXrayBypassController;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\MyController;
+use App\Http\Controllers\NetworkCheckController;
 use App\Http\Controllers\PartnerReferralController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ServersController;
@@ -25,8 +26,12 @@ use App\Http\Controllers\TelegramConfigController;
 use App\Http\Controllers\TelegramConnectController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserSubscriptionController;
+use App\Http\Middleware\ApplyReferralLink;
+use App\Http\Middleware\RedirectUnavailableIntendedPage;
 use App\Http\Middleware\VerifyCsrfToken;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Laravel\Fortify\RoutePath;
 
 /*
@@ -47,6 +52,15 @@ Route::get('/', [Controller::class, 'showMainPage'])->name('home');
 Route::get('/about-company', [Controller::class, 'aboutCompany'])->name('about-company');
 Route::get('/contacts', [Controller::class, 'contacts'])->name('contacts');
 Route::get('/documents', [Controller::class, 'documents'])->name('documents');
+Route::get('/ip-check', [NetworkCheckController::class, 'show'])
+    ->withoutMiddleware([
+        StartSession::class,
+        ApplyReferralLink::class,
+        RedirectUnavailableIntendedPage::class,
+        ShareErrorsFromSession::class,
+        VerifyCsrfToken::class,
+    ])
+    ->name('ip-check');
 Route::get('/app/open', [AppOpenController::class, 'show'])->name('app.open');
 
 Route::post('/contact/email', [\App\Http\Controllers\ContactEmailController::class, 'send'])
